@@ -22439,6 +22439,7 @@ function sanitizeSupportData(value, { maxDepth = 12, maxArray = 100 } = {}, dept
 // lib/dsp-adapters.mjs
 import { access as access2, copyFile as copyFile2, lstat as lstat2, mkdir as mkdir2, readFile as readFile2, rename, unlink, writeFile } from "node:fs/promises";
 import { constants as constants2 } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname as dirname2, extname as extname2, isAbsolute as isAbsolute2, join as join2, parse as parse3, resolve as resolve2 } from "node:path";
 var specs = Object.freeze({
   "equalizer-apo": { platforms: ["win32"], env: "AUDIO_EQUALIZER_APO_CONFIG", extensions: [".txt"], format: "equalizer-apo", description: "Equalizer APO managed configuration file" },
@@ -22446,7 +22447,8 @@ var specs = Object.freeze({
 });
 async function noSymlinkComponents(path) {
   let cursor = resolve2(path), root = parse3(cursor).root;
-  while (cursor !== root) {
+  const trustedRoots = /* @__PURE__ */ new Set([resolve2(homedir()), resolve2(tmpdir())]);
+  while (cursor !== root && !trustedRoots.has(cursor)) {
     try {
       if ((await lstat2(cursor)).isSymbolicLink()) throw new Error("Configured DSP path contains a symlink");
     } catch (error2) {
