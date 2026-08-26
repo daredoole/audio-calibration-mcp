@@ -101,3 +101,16 @@ ISO, IEC, ANSI/CTA, AES, and ITU conformity requires the complete current normat
 document, prescribed setup and processing, calibrated instrumentation, and traceable
 evidence. Optimization and FIR outputs remain proposals until protected, level-matched
 hardware remeasurement accepts them.
+
+## Curated external datasets
+
+`audio_dataset_catalog` exposes reviewed metadata for selected SADIE II, FLAIR,
+MeshRIR, and RAVes artifacts without downloading them. Dataset acquisition uses a
+hash-bound plan/execute pair, requires license acknowledgement, enforces an exact
+byte ceiling, accepts only pinned Zenodo HTTPS URLs, refuses overwrites, checks the
+upstream checksum, calculates SHA-256, and writes a provenance receipt under the
+workspace `datasets/` directory.
+
+Remote entries and checksum-verified downloads are not automatically scientific
+validation. Readiness is calculated per domain and requires parsed, method-compatible
+references from at least two independent institutions with justified tolerances.

@@ -7,6 +7,7 @@
 - Added GUM-style linear, Monte Carlo, and bootstrap uncertainty analysis.
 - Added coherence, phase-confidence, clock-drift, excitation, and harmonic-contamination quality gates.
 - Added room, polar/output, held-out multi-source, FIR, controlled-listening, immersive/SOFA, and evaluation-corpus modules with explicit standards claim levels.
+- Added a licensed independent-dataset catalog and confirmed, size-bounded, checksum-verified acquisition with provenance receipts and domain-specific readiness gates.
 
 ## 0.1.0-beta.1 — 2026-08-26
 

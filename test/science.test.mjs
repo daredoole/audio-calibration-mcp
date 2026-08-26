@@ -84,8 +84,9 @@ test("immersive, SOFA, and corpus preflights distinguish metadata from conforman
   assert.equal(layout.valid, true);
   const sofa = sofaMetadataAssessment({ SOFAConventions: "SimpleFreeFieldHRIR", DataType: "FIR", RoomType: "free field", SourcePosition: [[0, 0, 1]], ReceiverPosition: [[0, 0, 0]], DataIR: [[[1]]], SamplingRate: 48000 });
   assert.equal(sofa.valid, true);
-  const hash = "a".repeat(64), corpus = evaluationCorpusManifest({ synthetic: [{ id: "synthetic", sha256: hash }], external: [{ id: "lab-a", sha256: hash, license: "CC-BY", provenance: "Lab A", independent: true }], loopbacks: [{ id: "lab-b", sha256: hash, provenance: "Lab B", independent: true }] });
+  const hash = "a".repeat(64), corpus = evaluationCorpusManifest({ synthetic: [{ id: "synthetic", sha256: hash, availability: "bundled", verified: true }], external: [{ id: "lab-a", domain: "room-rir", sha256: hash, license: "CC-BY", provenance: "Lab A", institutions: ["Institution A"], availability: "local", verified: true, independent: true }], loopbacks: [{ id: "lab-b", domain: "room-rir", sha256: hash, provenance: "Lab B", institutions: ["Institution B"], availability: "local", verified: true, independent: true }] });
   assert.equal(corpus.gates.interLabReady, true);
+  assert.equal(corpus.gates.domainReadiness["room-rir"].interLabReady, true);
 });
 
 test("scientific kernels reject malformed or unsafe dimensions", () => {

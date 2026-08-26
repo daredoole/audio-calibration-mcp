@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "reviewedAt": "2026-08-26",
+  "datasets": [
+    {
+      "id": "sadie-ii-h7-brir-sofa",
+      "title": "SADIE II Database — H7 BRIR SOFA",
+      "domain": "sofa-brir",
+      "doi": "10.5281/zenodo.12092466",
+      "recordUrl": "https://doi.org/10.5281/zenodo.12092466",
+      "publicationDate": "2024-06-18",
+      "creators": ["AudioLab", "Kearney, Gavin Cyril"],
+      "institutions": ["University of York"],
+      "license": {
+        "spdx": "Apache-2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0",
+        "redistributable": true,
+        "attributionRequired": true
+      },
+      "independent": true,
+      "measurementMetadata": {
+        "kind": "binaural room impulse response",
+        "format": "AES69 SOFA in ZIP",
+        "sourceLayout": "50-point Lebedev grid",
+        "loudspeakers": "Genelec 8030/8040",
+        "sourceRadiusM": 1.5,
+        "sampleFormats": ["44.1 kHz/16-bit", "48 kHz/24-bit", "96 kHz/24-bit"],
+        "uncertaintyPublished": false
+      },
+      "artifact": {
+        "fileName": "H7_BRIR_SOFA.zip",
+        "url": "https://zenodo.org/api/records/12092466/files/H7_BRIR_SOFA.zip/content",
+        "bytes": 7453844,
+        "checksum": { "algorithm": "md5", "value": "3e12f2c9979fe739062461b350fd2e31" }
+      }
+    },
+    {
+      "id": "flair-room-rir",
+      "title": "FLAIR: Room Impulse Response Dataset with Laser-Calibrated Room Geometry",
+      "domain": "room-rir",
+      "doi": "10.5281/zenodo.17037517",
+      "recordUrl": "https://doi.org/10.5281/zenodo.17037517",
+      "publicationDate": "2025-09-02",
+      "creators": ["Sundström, David", "Elvander, Filip", "Jakobsson, Andreas"],
+      "institutions": ["Lund University", "Aalto University"],
+      "license": {
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/",
+        "redistributable": true,
+        "attributionRequired": true
+      },
+      "independent": true,
+      "measurementMetadata": {
+        "kind": "room impulse response and room geometry",
+        "responseCount": 270,
+        "geometry": "millimeter-accurate dense 3D point cloud",
+        "format": "MATLAB MAT",
+        "uncertaintyPublished": false
+      },
+      "artifact": {
+        "fileName": "data_FLAIR.mat",
+        "url": "https://zenodo.org/api/records/17037517/files/data_FLAIR.mat/content",
+        "bytes": 115821339,
+        "checksum": { "algorithm": "md5", "value": "41e06a449ff39d271e32b3b82ab29341" }
+      }
+    },
+    {
+      "id": "meshrir-s1-m3969-mat",
+      "title": "MeshRIR — single-source 3D meshed-grid MAT subset",
+      "domain": "room-rir",
+      "doi": "10.5281/zenodo.10852693",
+      "recordUrl": "https://doi.org/10.5281/zenodo.10852693",
+      "publicationDate": "2024-03-22",
+      "creators": ["Koyama, Shoichi", "Nishida, Tomoya", "Kimura, Keisuke", "Abe, Takumi", "Ueno, Natsuki", "Brunnström, Jesper"],
+      "institutions": ["The University of Tokyo"],
+      "license": {
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/",
+        "redistributable": true,
+        "attributionRequired": true
+      },
+      "independent": true,
+      "measurementMetadata": {
+        "kind": "room impulse responses on meshed grid points",
+        "geometry": "3D cuboidal receiver region from one source",
+        "format": "ZIP containing MATLAB MAT",
+        "uncertaintyPublished": false
+      },
+      "artifact": {
+        "fileName": "S1-M3969_mat.zip",
+        "url": "https://zenodo.org/api/records/10852693/files/S1-M3969_mat.zip/content",
+        "bytes": 994519347,
+        "checksum": { "algorithm": "md5", "value": "3c9e45f205db5720fe6ba2d6daf4d382" }
+      }
+    },
+    {
+      "id": "raves-srir-lr001",
+      "title": "RAVes — SRIRs LR001 subset",
+      "domain": "spatial-room-rir",
+      "doi": "10.5281/zenodo.19809790",
+      "recordUrl": "https://doi.org/10.5281/zenodo.19809790",
+      "publicationDate": "2026-04-27",
+      "creators": ["Treybig, Lukas", "Stolz, Georg", "Sloma, Ulrike", "Werner, Stephan"],
+      "institutions": ["Technische Universität Ilmenau"],
+      "license": {
+        "spdx": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/",
+        "redistributable": true,
+        "attributionRequired": true
+      },
+      "independent": true,
+      "measurementMetadata": {
+        "kind": "spatial and binaural room impulse responses",
+        "layout": "5.0 loudspeaker arrangement",
+        "layoutRadiusM": 2,
+        "loudspeakers": "ME Geithain RL 906",
+        "calibration": "76 dB SPL at 1 kHz and 1 m",
+        "format": "ZIP",
+        "uncertaintyPublished": false
+      },
+      "artifact": {
+        "fileName": "SRIRs_LR001.zip",
+        "url": "https://zenodo.org/api/records/19809790/files/SRIRs_LR001.zip/content",
+        "bytes": 23681964,
+        "checksum": { "algorithm": "md5", "value": "013fa7875d449de319c0d8d9931bd1ba" }
+      }
+    }
+  ]
+}

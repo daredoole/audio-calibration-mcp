@@ -5,3 +5,5 @@
 The manifest deliberately starts with an empty external/inter-laboratory section. Add an external artifact only when its license permits redistribution, provenance is traceable, a SHA-256 hash is pinned, calibration and uncertainty metadata are available, and a regression tolerance has been justified before seeing the result under test.
 
 Run `npm run corpus:verify` to check hashes, paths, provenance fields, licenses, and independence gates. Two separately produced traceable datasets are required before the harness reports inter-laboratory readiness.
+
+`catalog.json` lists reviewed remote artifacts from SADIE II, FLAIR, MeshRIR, and RAVes. It stores DOI, creators, institutions, licensing, measurement metadata, exact byte size, and upstream checksum. The files are intentionally not committed because selected artifacts range from roughly 7 MB to 1 GB. Catalog presence does not count as verified evidence.

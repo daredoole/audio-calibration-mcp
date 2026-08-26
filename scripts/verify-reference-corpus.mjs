@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluationCorpusManifest } from "../lib/listening-spatial.mjs";
+import { readDatasetCatalog, validateDatasetCatalog } from "../lib/dataset-catalog.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "reference"), manifest = JSON.parse(await readFile(join(root, "manifest.json"), "utf8"));
 for (const section of ["synthetic", "external", "loopbacks", "crossTool"]) {
@@ -14,5 +15,6 @@ for (const section of ["synthetic", "external", "loopbacks", "crossTool"]) {
   }
 }
 const assessment = evaluationCorpusManifest(manifest);
-if (!assessment.gates.everyArtifactHasHash || !assessment.gates.everyExternalArtifactHasLicense) throw new Error("Corpus evidence gate failed");
-console.log(JSON.stringify({ verified: true, artifacts: Object.values(assessment.sections).flat().length, independentReferences: assessment.gates.independentReferenceCount, interLabReady: assessment.gates.interLabReady }));
+if (!assessment.gates.everyLocalArtifactHasHash || !assessment.gates.everyExternalArtifactHasLicense) throw new Error("Corpus evidence gate failed");
+const catalog = validateDatasetCatalog(await readDatasetCatalog()); if (!catalog.valid) throw new Error(`Dataset catalog failed: ${catalog.issues.join("; ")}`);
+console.log(JSON.stringify({ verified: true, artifacts: Object.values(assessment.sections).flat().length, verifiedIndependentReferences: assessment.gates.verifiedIndependentReferenceCount, interLabReady: assessment.gates.interLabReady, catalogedRemoteDatasets: catalog.datasetCount }));

@@ -25,6 +25,7 @@ Use these modes only when the evidence supports them. A calculation marked `stan
 - Use `audio_laboratory_listening_plan` and `audio_laboratory_listening_report` for MUSHRA/BS.1116-inspired research. Require level matching, concealment, hidden references, anchors where applicable, listener screening, repeat trials, and adequate power.
 - `audio_spatial_layout_assessment` and `audio_sofa_metadata_assessment` are metadata preflights. A maintained SOFA HDF5 implementation remains necessary for actual import/export.
 - Audit evaluation artifacts with `audio_evaluation_corpus_manifest`. Synthetic fixtures prove regression behavior, not independent accuracy. Inter-laboratory claims require separately produced, traceable datasets.
+- Use `audio_dataset_catalog` to inspect reviewed remote datasets. Download only through `audio_dataset_download_plan` and its confirmed executor after reviewing size, license, attribution, DOI, institution, and measurement metadata. A verified download receipt proves file identity only; parse the data and establish method-compatible tolerances before adding it to a domain readiness manifest.
 
 ## Authoritative references
 

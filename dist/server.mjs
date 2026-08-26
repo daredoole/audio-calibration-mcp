@@ -21420,8 +21420,8 @@ var StdioServerTransport = class {
 };
 
 // server.mjs
-import { access as access5, copyFile as copyFile3, mkdir as mkdir4, readFile as readFile4, readdir as readdir2, rename as rename2, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
-import { basename, dirname as dirname4, join as join4, relative as relative2 } from "node:path";
+import { access as access6, copyFile as copyFile3, mkdir as mkdir5, readFile as readFile5, readdir as readdir2, rename as rename2, unlink as unlink3, writeFile as writeFile3 } from "node:fs/promises";
+import { basename, dirname as dirname5, join as join5, relative as relative2 } from "node:path";
 import { execFile as execFile3 } from "node:child_process";
 import { promisify as promisify3 } from "node:util";
 
@@ -23294,16 +23294,105 @@ function sofaMetadataAssessment(metadata) {
   return { claimLevel: "SOFA metadata preflight", valid: missing.length === 0, missing, dimensions, convention: metadata.SOFAConventions ?? null, boundary: "This preflight does not parse HDF5, validate a convention-specific schema, or certify SOFA conformance; use a maintained SOFA API for import/export." };
 }
 function evaluationCorpusManifest({ synthetic = [], external = [], loopbacks = [], crossTool = [] }) {
-  const classify = (item) => ({ id: item.id, sha256: item.sha256 ?? null, license: item.license ?? null, provenance: item.provenance ?? null, independent: Boolean(item.independent), regressionTolerance: item.regressionTolerance ?? null });
-  const sections = { synthetic: synthetic.map(classify), external: external.map(classify), loopbacks: loopbacks.map(classify), crossTool: crossTool.map(classify) }, independentCount = [...sections.external, ...sections.loopbacks, ...sections.crossTool].filter((item) => item.independent && item.sha256 && item.provenance).length;
-  return { schemaVersion: 1, sections, gates: { everyArtifactHasHash: Object.values(sections).flat().every((item) => Boolean(item.sha256)), everyExternalArtifactHasLicense: sections.external.every((item) => Boolean(item.license)), independentReferenceCount: independentCount, interLabReady: independentCount >= 2 }, boundary: "Synthetic fixtures test algorithms but are not independent validation. Inter-laboratory reproducibility needs separately produced, traceable measurements." };
+  const classify = (item) => ({ id: item.id, domain: item.domain ?? "unspecified", sha256: item.sha256 ?? null, license: item.license ?? null, provenance: item.provenance ?? null, institutions: [...new Set(item.institutions || [])], availability: item.availability ?? "local", verified: Boolean(item.verified), independent: Boolean(item.independent), regressionTolerance: item.regressionTolerance ?? null });
+  const sections = { synthetic: synthetic.map(classify), external: external.map(classify), loopbacks: loopbacks.map(classify), crossTool: crossTool.map(classify) }, all = Object.values(sections).flat(), candidates = [...sections.external, ...sections.loopbacks, ...sections.crossTool], verifiedIndependent = candidates.filter((item) => item.independent && item.verified && item.availability !== "remote" && item.sha256 && item.provenance && item.institutions.length);
+  const domains = {};
+  for (const item of candidates) {
+    const domain = domains[item.domain] ||= { cataloged: 0, verifiedIndependent: 0, institutions: /* @__PURE__ */ new Set() };
+    domain.cataloged++;
+    if (verifiedIndependent.includes(item)) {
+      domain.verifiedIndependent++;
+      for (const institution of item.institutions) domain.institutions.add(institution);
+    }
+  }
+  const domainReadiness = Object.fromEntries(Object.entries(domains).map(([domain, value]) => [domain, { cataloged: value.cataloged, verifiedIndependent: value.verifiedIndependent, institutions: [...value.institutions], interLabReady: value.verifiedIndependent >= 2 && value.institutions.size >= 2 }]));
+  return { schemaVersion: 2, sections, gates: { everyLocalArtifactHasHash: all.filter((item) => item.availability !== "remote").every((item) => Boolean(item.sha256)), everyExternalArtifactHasLicense: sections.external.every((item) => Boolean(item.license)), verifiedIndependentReferenceCount: verifiedIndependent.length, domainReadiness, interLabReady: Object.values(domainReadiness).some((value) => value.interLabReady) }, boundary: "Catalog entries and downloads are not accepted references by themselves. Inter-laboratory readiness is domain-specific and requires at least two checksum-verified, parsed, method-compatible datasets from distinct institutions with documented provenance and justified tolerances." };
+}
+
+// lib/dataset-catalog.mjs
+import { createHash as createHash3, randomUUID as randomUUID2 } from "node:crypto";
+import { createWriteStream } from "node:fs";
+import { access as access5, link, mkdir as mkdir4, readFile as readFile4, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname4 } from "node:path";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+var catalogUrl = new URL("../fixtures/reference/catalog.json", import.meta.url);
+var exists = (path) => access5(path).then(() => true, () => false);
+async function readDatasetCatalog() {
+  const catalog = JSON.parse(await readFile4(catalogUrl, "utf8"));
+  if (catalog.schemaVersion !== 1 || !Array.isArray(catalog.datasets)) throw new Error("Unsupported dataset catalog schema");
+  return catalog;
+}
+function validateDatasetCatalog(catalog) {
+  const issues = [], ids = /* @__PURE__ */ new Set();
+  for (const dataset of catalog.datasets || []) {
+    if (!/^[a-z0-9][a-z0-9_-]{2,79}$/.test(dataset.id || "")) issues.push(`${dataset.id || "unknown"}: invalid id`);
+    if (ids.has(dataset.id)) issues.push(`${dataset.id}: duplicate id`);
+    ids.add(dataset.id);
+    if (!dataset.doi || !dataset.recordUrl || !dataset.license?.spdx || !dataset.license?.url) issues.push(`${dataset.id}: incomplete citation or license`);
+    if (!dataset.independent || !dataset.institutions?.length) issues.push(`${dataset.id}: independence provenance incomplete`);
+    const artifact = dataset.artifact || {};
+    if (!/^[A-Za-z0-9._-]+$/.test(artifact.fileName || "")) issues.push(`${dataset.id}: unsafe artifact filename`);
+    if (!Number.isSafeInteger(artifact.bytes) || artifact.bytes <= 0) issues.push(`${dataset.id}: invalid artifact size`);
+    if (artifact.checksum?.algorithm !== "md5" || !/^[a-f0-9]{32}$/.test(artifact.checksum?.value || "")) issues.push(`${dataset.id}: invalid pinned checksum`);
+    try {
+      const url = new URL(artifact.url);
+      if (url.protocol !== "https:" || url.hostname !== "zenodo.org") issues.push(`${dataset.id}: untrusted artifact host`);
+    } catch {
+      issues.push(`${dataset.id}: invalid artifact URL`);
+    }
+  }
+  return { valid: issues.length === 0, issues, datasetCount: catalog.datasets?.length || 0, reviewedAt: catalog.reviewedAt || null };
+}
+async function downloadDatasetArtifact({ artifact, outputPath, receiptPath, maximumBytes, timeoutMs = 3e5, fetchImpl = fetch }) {
+  if (await exists(outputPath) || await exists(receiptPath)) throw new Error("Refusing to overwrite an existing dataset or receipt");
+  if (artifact.bytes > maximumBytes) throw new Error("Pinned artifact exceeds the confirmed maximum download size");
+  const temporary = `${outputPath}.partial-${randomUUID2()}`, controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
+  await mkdir4(dirname4(outputPath), { recursive: true });
+  try {
+    const response = await fetchImpl(artifact.url, { redirect: "follow", signal: controller.signal });
+    if (!response.ok || !response.body) throw new Error(`Dataset download failed with HTTP ${response.status}`);
+    const finalUrl = new URL(response.url || artifact.url);
+    if (finalUrl.protocol !== "https:" || finalUrl.hostname !== "zenodo.org") throw new Error("Dataset download redirected to an untrusted host");
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > maximumBytes) throw new Error("Server-declared dataset size exceeds the confirmed maximum");
+    const md5 = createHash3("md5"), sha256 = createHash3("sha256");
+    let bytes = 0;
+    const verifier = new Transform({ transform(chunk, _encoding, callback) {
+      bytes += chunk.length;
+      if (bytes > maximumBytes || bytes > artifact.bytes) return callback(new Error("Dataset exceeded its pinned size"));
+      md5.update(chunk);
+      sha256.update(chunk);
+      callback(null, chunk);
+    } });
+    await pipeline(Readable.fromWeb(response.body), verifier, createWriteStream(temporary, { flags: "wx" }));
+    const upstreamChecksum = md5.digest("hex"), localSha256 = sha256.digest("hex");
+    if (bytes !== artifact.bytes) throw new Error(`Dataset size mismatch: expected ${artifact.bytes}, received ${bytes}`);
+    if (upstreamChecksum !== artifact.checksum.value) throw new Error("Dataset checksum mismatch");
+    await link(temporary, outputPath);
+    await unlink2(temporary);
+    const receipt = { schemaVersion: 1, downloadedAt: (/* @__PURE__ */ new Date()).toISOString(), sourceUrl: artifact.url, finalUrl: finalUrl.href, bytes, upstreamChecksum: artifact.checksum, sha256: localSha256, fileName: artifact.fileName };
+    try {
+      await writeFile2(receiptPath, JSON.stringify(receipt, null, 2) + "\n", { flag: "wx" });
+    } catch (error2) {
+      await unlink2(outputPath).catch(() => {
+      });
+      throw error2;
+    }
+    return receipt;
+  } finally {
+    clearTimeout(timer);
+    await unlink2(temporary).catch(() => {
+    });
+  }
 }
 
 // tool-domains/science-tools.mjs
+import { join as join4 } from "node:path";
 var complexSchema = external_exports.object({ re: external_exports.number().finite(), im: external_exports.number().finite() });
 var uncertaintyComponent = external_exports.object({ name: external_exports.string().min(1).max(100), uncertainty: external_exports.number().nonnegative(), distribution: external_exports.enum(["normal", "rectangular", "triangular"]), coverageFactor: external_exports.number().positive().max(10).optional(), sensitivity: external_exports.number().finite().default(1), degreesOfFreedom: external_exports.number().positive().max(1e9).optional() });
-var corpusItem = external_exports.object({ id: external_exports.string().min(1).max(120), sha256: external_exports.string().regex(/^[a-fA-F0-9]{64}$/).optional(), license: external_exports.string().max(120).optional(), provenance: external_exports.string().max(500).optional(), independent: external_exports.boolean().default(false), regressionTolerance: external_exports.number().nonnegative().optional() });
-function registerScienceTools(server2, { ok: ok2, guarded: guarded2 }) {
+var corpusItem = external_exports.object({ id: external_exports.string().min(1).max(120), domain: external_exports.string().min(1).max(80).default("unspecified"), sha256: external_exports.string().regex(/^[a-fA-F0-9]{64}$/).optional(), license: external_exports.string().max(120).optional(), provenance: external_exports.string().max(500).optional(), institutions: external_exports.array(external_exports.string().min(1).max(160)).max(20).default([]), availability: external_exports.enum(["bundled", "local", "remote"]).default("local"), verified: external_exports.boolean().default(false), independent: external_exports.boolean().default(false), regressionTolerance: external_exports.number().nonnegative().optional() });
+function registerScienceTools(server2, { ok: ok2, guarded: guarded2, bindPlan: bindPlan2, verifyPlan: verifyPlan2, stableToken: stableToken2, workspaceRoot: workspaceRoot2, safeWorkspacePath: safeWorkspacePath2 }) {
   server2.tool("audio_uncertainty_budget", "Propagate calibrated measurement uncertainty using GUM-style linear combination and an explicit standards-claim boundary.", { components: external_exports.array(uncertaintyComponent).min(1).max(100), coverageProbability: external_exports.literal(0.95).default(0.95) }, guarded2(async ({ components, coverageProbability }) => ok2(uncertaintyBudget(components, { coverageProbability }))));
   server2.tool("audio_uncertainty_monte_carlo", "Propagate normal, rectangular, and triangular input uncertainties with deterministic JCGM-101-style Monte Carlo sampling.", { components: external_exports.array(uncertaintyComponent).min(1).max(100), trials: external_exports.number().int().min(1e3).max(2e5).default(2e4), seed: external_exports.number().int().default(1729), estimate: external_exports.number().finite().default(0) }, guarded2(async ({ components, ...options }) => ok2(monteCarloUncertainty(components, options))));
   server2.tool("audio_repeatability_bootstrap", "Estimate repeatability and a deterministic bootstrap confidence interval from repeated scalar measurements.", { values: external_exports.array(external_exports.number().finite()).min(2).max(1e3), trials: external_exports.number().int().min(1e3).max(1e5).default(1e4), seed: external_exports.number().int().default(2718) }, guarded2(async ({ values, ...options }) => ok2(bootstrapConfidence(values, options))));
@@ -23321,6 +23410,34 @@ function registerScienceTools(server2, { ok: ok2, guarded: guarded2 }) {
   server2.tool("audio_spatial_layout_assessment", "Preflight immersive channel coordinates and head-position metadata without overstating BS.2051 compliance.", { channels: external_exports.array(external_exports.object({ label: external_exports.string().min(1).max(40), azimuthDeg: external_exports.number().finite(), elevationDeg: external_exports.number().finite(), radiusM: external_exports.number().positive().max(100).optional() })).min(2).max(128), listener: external_exports.object({ x: external_exports.number().finite(), y: external_exports.number().finite(), z: external_exports.number().finite() }).default({ x: 0, y: 0, z: 0 }), headPositionMetadata: external_exports.record(external_exports.any()).optional() }, guarded2(async (args) => ok2(spatialLayoutAssessment(args))));
   server2.tool("audio_sofa_metadata_assessment", "Preflight HRTF/BRIR SOFA metadata before handing the HDF5 file to a maintained SOFA implementation.", { metadata: external_exports.record(external_exports.any()) }, guarded2(async ({ metadata }) => ok2(sofaMetadataAssessment(metadata))));
   server2.tool("audio_evaluation_corpus_manifest", "Audit synthetic, external, loopback, and cross-tool reference artifacts for hashes, licenses, independence, provenance, and regression tolerances.", { synthetic: external_exports.array(corpusItem).max(1e3).default([]), external: external_exports.array(corpusItem).max(1e3).default([]), loopbacks: external_exports.array(corpusItem).max(1e3).default([]), crossTool: external_exports.array(corpusItem).max(1e3).default([]) }, guarded2(async (args) => ok2(evaluationCorpusManifest(args))));
+  server2.tool("audio_dataset_catalog", "List curated independent audio datasets with DOI, institution, license, measurement metadata, pinned artifact size, and checksum without downloading anything.", {}, guarded2(async () => {
+    const catalog = await readDatasetCatalog(), validation = validateDatasetCatalog(catalog);
+    if (!validation.valid) throw new Error(`Dataset catalog failed validation: ${validation.issues.join("; ")}`);
+    return ok2({ ...catalog, validation, downloaded: false, readinessBoundary: "Remote catalog metadata is not measurement evidence and does not count toward inter-laboratory readiness until an artifact is downloaded, checksum-verified, parsed, and accepted for a specific domain." });
+  }));
+  server2.tool("audio_dataset_download_plan", "Create a hash-bound plan for one pinned licensed dataset artifact. No download occurs until the matching execute tool is explicitly confirmed.", { datasetId: external_exports.string().regex(/^[a-z0-9][a-z0-9_-]{2,79}$/), maximumBytes: external_exports.number().int().positive().max(2e9), licenseAccepted: external_exports.boolean().default(false), home: external_exports.string().optional() }, guarded2(async ({ datasetId, maximumBytes, licenseAccepted, home }) => {
+    if (!licenseAccepted) throw new Error("Explicit license and attribution acknowledgement is required at planning time");
+    const catalog = await readDatasetCatalog(), validation = validateDatasetCatalog(catalog);
+    if (!validation.valid) throw new Error("Dataset catalog validation failed");
+    const dataset = catalog.datasets.find((item) => item.id === datasetId);
+    if (!dataset) throw new Error("Unknown dataset id");
+    if (!dataset.license.redistributable) throw new Error("Dataset is not approved for acquisition");
+    if (dataset.artifact.bytes > maximumBytes) throw new Error("Pinned artifact exceeds maximumBytes");
+    const root = await workspaceRoot2(home), extension = dataset.artifact.fileName.slice(dataset.artifact.fileName.lastIndexOf("."));
+    const outputPath = await safeWorkspacePath2(root, join4("datasets", dataset.artifact.fileName), [extension]), receiptPath = await safeWorkspacePath2(root, join4("datasets", `${dataset.id}.dataset.json`), [".json"]), catalogFingerprint = stableToken2(dataset);
+    return ok2(bindPlan2({ kind: "audio-dataset-download", createdAt: (/* @__PURE__ */ new Date()).toISOString(), home, dataset, catalogFingerprint, maximumBytes, licenseAccepted, outputPath, receiptPath }));
+  }));
+  server2.tool("audio_dataset_download_execute", "Download one exact planned dataset artifact, enforce the byte ceiling, verify its pinned upstream checksum, calculate SHA-256, and write a provenance receipt without overwriting files.", { plan: external_exports.record(external_exports.any()), confirmationToken: external_exports.string(), confirm: external_exports.boolean().default(false), timeoutMs: external_exports.number().int().min(1e4).max(18e5).default(3e5) }, guarded2(async ({ plan, confirmationToken, confirm, timeoutMs }) => {
+    if (!confirm) throw new Error("Explicit confirmation is required");
+    const p = verifyPlan2(plan, confirmationToken);
+    if (p.kind !== "audio-dataset-download" || !p.licenseAccepted) throw new Error("Wrong or unlicensed dataset plan");
+    const catalog = await readDatasetCatalog(), dataset = catalog.datasets.find((item) => item.id === p.dataset.id);
+    if (!dataset || stableToken2(dataset) !== p.catalogFingerprint) throw new Error("Dataset catalog changed after planning");
+    const root = await workspaceRoot2(p.home), extension = dataset.artifact.fileName.slice(dataset.artifact.fileName.lastIndexOf(".")), outputPath = await safeWorkspacePath2(root, join4("datasets", dataset.artifact.fileName), [extension]), receiptPath = await safeWorkspacePath2(root, join4("datasets", `${dataset.id}.dataset.json`), [".json"]);
+    if (outputPath !== p.outputPath || receiptPath !== p.receiptPath) throw new Error("Dataset destination changed after planning");
+    const receipt = await downloadDatasetArtifact({ artifact: dataset.artifact, outputPath, receiptPath, maximumBytes: p.maximumBytes, timeoutMs });
+    return ok2({ downloaded: outputPath, receipt: receiptPath, dataset: { id: dataset.id, title: dataset.title, domain: dataset.domain, doi: dataset.doi, institutions: dataset.institutions, license: dataset.license }, verification: receipt, readinessBoundary: "Checksum verification proves file identity, not acoustic validity. Parse and cross-check this dataset before adding its receipt to a domain readiness manifest." });
+  }));
 }
 
 // server.mjs
@@ -23335,18 +23452,18 @@ var guarded = (fn) => async (args) => {
   }
 };
 var planSchema = { plan: external_exports.record(external_exports.any()), confirmationToken: external_exports.string(), confirm: external_exports.boolean().default(false) };
-var pathExists = (path) => access5(path).then(() => true, () => false);
+var pathExists = (path) => access6(path).then(() => true, () => false);
 var writeAtomicSet = async (entries, token) => {
   for (const [path] of entries) if (await pathExists(path)) throw new Error(`Refusing to overwrite existing artifact: ${path}`);
   const temporaries = entries.map(([path, content], i) => [`${path}.tmp-${token.slice(0, 12)}-${i}`, path, content]), committed = [];
   try {
-    for (const [temporary, , content] of temporaries) await writeFile2(temporary, content, { flag: "wx" });
+    for (const [temporary, , content] of temporaries) await writeFile3(temporary, content, { flag: "wx" });
     for (const [temporary, path] of temporaries) {
       await rename2(temporary, path);
       committed.push(path);
     }
   } catch (error2) {
-    await Promise.all([...temporaries.map(([temporary]) => temporary), ...committed].map((path) => unlink2(path).catch(() => {
+    await Promise.all([...temporaries.map(([temporary]) => temporary), ...committed].map((path) => unlink3(path).catch(() => {
     })));
     throw error2;
   }
@@ -23393,13 +23510,13 @@ var GUIDED_STAGE_TOOLS = Object.freeze({
   report: ["audio_report_plan", "audio_report_execute"]
 });
 registerReleaseTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath, writeAtomicSet, exportFilters, rew });
-registerScienceTools(server, { ok, guarded });
-server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["laptop", "car", "general"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], measurementScience: ["GUM linear and JCGM-101-style Monte Carlo uncertainty", "bootstrap repeatability confidence", "coherence and phase-confidence trace rejection", "clock drift and harmonic contamination", "EDT, T20/T30, C50/C80, D50, center time, spatial variance", "polar/directivity and clean-output characterization", "held-out-seat complex multi-source optimization", "regularized bounded FIR with causality and deployment gates", "MUSHRA and BS.1116-inspired controlled tests", "immersive layout and SOFA metadata preflight", "independent-corpus provenance gates"], claimLevels: ["engineering-quality-screen", "standards-aligned", "conformant only with complete normative procedure and evidence"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation", "no standards conformance claim from home measurements alone"] })));
+registerScienceTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath });
+server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["laptop", "car", "general"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts", "curated licensed dataset catalog with confirmed checksum-verified acquisition"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], measurementScience: ["GUM linear and JCGM-101-style Monte Carlo uncertainty", "bootstrap repeatability confidence", "coherence and phase-confidence trace rejection", "clock drift and harmonic contamination", "EDT, T20/T30, C50/C80, D50, center time, spatial variance", "polar/directivity and clean-output characterization", "held-out-seat complex multi-source optimization", "regularized bounded FIR with causality and deployment gates", "MUSHRA and BS.1116-inspired controlled tests", "immersive layout and SOFA metadata preflight", "domain-specific independent-corpus provenance gates"], claimLevels: ["engineering-quality-screen", "standards-aligned", "conformant only with complete normative procedure and evidence"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation", "no standards conformance claim from home measurements alone", "remote catalog entries never count as verified evidence"] })));
 server.tool("audio_workspace_scan", "Inventory profiles, sessions, measurements, backups, and reports in the AudioCalibration workspace.", { home: external_exports.string().optional() }, guarded(async ({ home }) => {
   const root = await workspaceRoot(home), groups = {};
-  for (const name of ["profiles", "sessions", "measurements", "backups", "reports", "filters", "support"]) {
-    const dir = join4(root, name);
-    await mkdir4(dir, { recursive: true });
+  for (const name of ["profiles", "sessions", "measurements", "backups", "reports", "filters", "support", "datasets"]) {
+    const dir = join5(root, name);
+    await mkdir5(dir, { recursive: true });
     groups[name] = (await readdir2(dir, { withFileTypes: true })).filter((x) => x.isFile()).map((x) => x.name).slice(0, 200);
   }
   return ok({ root, groups });
@@ -23506,7 +23623,7 @@ server.tool("rew_measurement_plan", "Create a guarded generic REW sweep plan for
 }, guarded(async (args) => {
   if (args.targetId && !TARGET_REGISTRY[args.targetId]) throw new Error("Unknown targetId");
   const root = await workspaceRoot(args.home), defaults = DEVICE_LIMITS[args.deviceClass], settings = safeMeasurementSettings(args.deviceClass, { startHz: args.startHz ?? defaults.startHz, endHz: args.endHz ?? defaults.endHz, levelDbfs: args.levelDbfs ?? defaults.levelDbfs, maxSplDb: args.maxSplDb ?? defaults.maxSplDb });
-  const [audio, hostState, jamesDspState] = await Promise.all([audioSnapshot(), hostStateSnapshot(), jamesStateSnapshot()]), savePath = await safeWorkspacePath(root, join4("measurements", args.saveFile), [".mdat"]);
+  const [audio, hostState, jamesDspState] = await Promise.all([audioSnapshot(), hostStateSnapshot(), jamesStateSnapshot()]), savePath = await safeWorkspacePath(root, join5("measurements", args.saveFile), [".mdat"]);
   const sweep = { ...settings, repetitions: args.repetitions, sweepLength: args.sweepLength, timingReference: args.timingReference };
   return ok(bindPlan({ kind: "rew-measurement", mode: "standard", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deviceClass: args.deviceClass, targetId: args.targetId || null, home: args.home, audio, audioIdentity: audioStateIdentity(audio), hostState, jamesDspState, stateFingerprint: capturedMeasurementState(audio, hostState, jamesDspState, sweep), settings: sweep, runs: args.outputChannels.map((outputChannel, i) => ({ outputChannel, title: `${args.titlePrefix} ${i + 1}` })), savePath }));
 }));
@@ -23529,7 +23646,7 @@ server.tool("rew_repeated_session_plan", "Plan 4-6 separately retained left, rig
   const roles = new Set(args.channels.map((x) => x.role));
   if (!["left", "right", "combined"].every((x) => roles.has(x))) throw new Error("Exactly one left, right, and combined channel mapping is required");
   const root = await workspaceRoot(args.home), defaults = DEVICE_LIMITS[args.deviceClass], settings = safeMeasurementSettings(args.deviceClass, { startHz: args.startHz ?? defaults.startHz, endHz: args.endHz ?? defaults.endHz, levelDbfs: args.levelDbfs ?? defaults.levelDbfs, maxSplDb: args.maxSplDb ?? defaults.maxSplDb });
-  const [audio, hostState, jamesDspState] = await Promise.all([audioSnapshot(), hostStateSnapshot(), jamesStateSnapshot()]), sweep = { ...settings, repetitions: 1, evidenceRepeats: args.repeats, sweepLength: args.sweepLength, timingReference: args.timingReference }, savePath = await safeWorkspacePath(root, join4("measurements", args.saveFile), [".mdat"]), runs = [];
+  const [audio, hostState, jamesDspState] = await Promise.all([audioSnapshot(), hostStateSnapshot(), jamesStateSnapshot()]), sweep = { ...settings, repetitions: 1, evidenceRepeats: args.repeats, sweepLength: args.sweepLength, timingReference: args.timingReference }, savePath = await safeWorkspacePath(root, join5("measurements", args.saveFile), [".mdat"]), runs = [];
   for (let repeat = 1; repeat <= args.repeats; repeat++) for (const channel of args.channels) runs.push({ ...channel, repeat, title: `${args.titlePrefix} ${channel.role} R${repeat}`, levelDbfs: settings.levelDbfs });
   return ok(bindPlan({ kind: "rew-measurement", mode: "separate-repeated-evidence", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deviceClass: args.deviceClass, targetId: args.targetId || null, home: args.home, audio, audioIdentity: audioStateIdentity(audio), hostState, jamesDspState, stateFingerprint: capturedMeasurementState(audio, hostState, jamesDspState, sweep), settings: sweep, runs, savePath }));
 }));
@@ -23553,7 +23670,7 @@ server.tool("rew_level_ladder_plan", "Plan protected separately retained distort
   if (levels.length !== args.levelsDbfs.length) throw new Error("Sweep levels must be unique");
   const root = await workspaceRoot(args.home), defaults = DEVICE_LIMITS[args.deviceClass];
   for (const levelDbfs of levels) safeMeasurementSettings(args.deviceClass, { startHz: args.startHz ?? defaults.startHz, endHz: args.endHz ?? defaults.endHz, levelDbfs, maxSplDb: args.maxSplDb ?? defaults.maxSplDb });
-  const settings = { startHz: args.startHz ?? defaults.startHz, endHz: args.endHz ?? defaults.endHz, levelDbfs: levels[0], maxSplDb: args.maxSplDb ?? defaults.maxSplDb, repetitions: 1, sweepLength: args.sweepLength, timingReference: args.timingReference, levelsDbfs: levels }, [audio, hostState, jamesDspState] = await Promise.all([audioSnapshot(), hostStateSnapshot(), jamesStateSnapshot()]), savePath = await safeWorkspacePath(root, join4("measurements", args.saveFile), [".mdat"]);
+  const settings = { startHz: args.startHz ?? defaults.startHz, endHz: args.endHz ?? defaults.endHz, levelDbfs: levels[0], maxSplDb: args.maxSplDb ?? defaults.maxSplDb, repetitions: 1, sweepLength: args.sweepLength, timingReference: args.timingReference, levelsDbfs: levels }, [audio, hostState, jamesDspState] = await Promise.all([audioSnapshot(), hostStateSnapshot(), jamesStateSnapshot()]), savePath = await safeWorkspacePath(root, join5("measurements", args.saveFile), [".mdat"]);
   return ok(bindPlan({ kind: "rew-measurement", mode: "protected-level-ladder", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deviceClass: args.deviceClass, targetId: args.targetId || null, home: args.home, audio, audioIdentity: audioStateIdentity(audio), hostState, jamesDspState, stateFingerprint: capturedMeasurementState(audio, hostState, jamesDspState, settings), settings, runs: levels.map((levelDbfs) => ({ outputChannel: args.outputChannel, role: args.role, levelDbfs, title: `${args.titlePrefix} ${levelDbfs}dBFS` })), savePath }));
 }));
 server.tool("rew_measurement_execute", "Run an exact protected sweep plan, label and save results, then restore REW state. Audible confirmation and physical readiness flags are mandatory.", {
@@ -23624,10 +23741,10 @@ server.tool("rew_measurement_execute", "Run an exact protected sweep plan, label
       await assertStableMeasurementState(p, run2.outputChannel);
       await new Promise((resolve3) => setTimeout(resolve3, 2e3));
     }
-    await mkdir4(dirname4(p.savePath), { recursive: true });
+    await mkdir5(dirname5(p.savePath), { recursive: true });
     await rew("/measurements/command", { method: "POST", body: { command: "Save all", parameters: [p.savePath, `${p.deviceClass} protected calibration session`] }, timeoutMs: 12e4 });
-    const root = await workspaceRoot(p.home), artifact = createCalibrationArtifact({ session: { id: confirmationToken.slice(0, 16), deviceClass: p.deviceClass, algorithmVersion: "0.1.0-beta.1", targetId: p.targetId || null, targetVersion: p.targetId ? TARGET_REGISTRY[p.targetId]?.version || null : null, mode: p.mode, sourcePlanHash: confirmationToken }, sweeps: completed.map((run2) => ({ id: run2.id, role: run2.role, repeat: run2.repeat, levelDbfs: run2.levelDbfs, outputChannel: run2.outputChannel, fingerprints: { control: run2.controlFingerprint || stableToken({ control: "unknown" }), preset: run2.presetFingerprint, microphone: run2.microphoneCalibrationHash, sweep: run2.sweepFingerprint }, measurementFile: relative2(root, p.savePath), traceHash: stableToken({ id: run2.id, title: run2.title, stateFingerprint: run2.stateFingerprint }) })), provenance: { softwareVersion: "0.1.0-beta.1", rewUrl: REW_BASE, platform: process.platform, arch: process.arch } }), artifactPath = await safeWorkspacePath(root, join4("sessions", `${basename(p.savePath, ".mdat")}-${confirmationToken.slice(0, 12)}.calibration.json`), [".json"]);
-    await mkdir4(dirname4(artifactPath), { recursive: true });
+    const root = await workspaceRoot(p.home), artifact = createCalibrationArtifact({ session: { id: confirmationToken.slice(0, 16), deviceClass: p.deviceClass, algorithmVersion: "0.1.0-beta.1", targetId: p.targetId || null, targetVersion: p.targetId ? TARGET_REGISTRY[p.targetId]?.version || null : null, mode: p.mode, sourcePlanHash: confirmationToken }, sweeps: completed.map((run2) => ({ id: run2.id, role: run2.role, repeat: run2.repeat, levelDbfs: run2.levelDbfs, outputChannel: run2.outputChannel, fingerprints: { control: run2.controlFingerprint || stableToken({ control: "unknown" }), preset: run2.presetFingerprint, microphone: run2.microphoneCalibrationHash, sweep: run2.sweepFingerprint }, measurementFile: relative2(root, p.savePath), traceHash: stableToken({ id: run2.id, title: run2.title, stateFingerprint: run2.stateFingerprint }) })), provenance: { softwareVersion: "0.1.0-beta.1", rewUrl: REW_BASE, platform: process.platform, arch: process.arch } }), artifactPath = await safeWorkspacePath(root, join5("sessions", `${basename(p.savePath, ".mdat")}-${confirmationToken.slice(0, 12)}.calibration.json`), [".json"]);
+    await mkdir5(dirname5(artifactPath), { recursive: true });
     await writeAtomicSet([[artifactPath, JSON.stringify(artifact, null, 2) + "\n"]], confirmationToken);
     return ok({ completed, saved: p.savePath, calibrationArtifact: artifactPath, settings: p.settings, stateEvidence: { verified: true, sourcePlanHash: confirmationToken, fingerprint: p.stateFingerprint, audioIdentity: p.audioIdentity, hostState: p.hostState, jamesDspState: p.jamesDspState, monitorIntervalMs: 1500, verifiedAt: (/* @__PURE__ */ new Date()).toISOString() }, skippedRequestedChannels: p.runs.map((x) => x.outputChannel).filter((x) => !completed.some((y) => y.outputChannel === x)), next: "Run rew_measurement_quality with this protected-session state evidence before interpretation or EQ." });
   } finally {
@@ -23643,7 +23760,7 @@ server.tool("rew_measurement_cancel", "Cancel a live REW measurement.", { confir
   return ok({ response: await rew("/measure/command", { method: "POST", body: { command: cancel || "Cancel" } }) });
 }));
 var rewSaveAllPlan = async ({ home, saveFile, note = "Audio calibration measurements" }) => {
-  const root = await workspaceRoot(home), path = await safeWorkspacePath(root, join4("measurements", saveFile), [".mdat"]);
+  const root = await workspaceRoot(home), path = await safeWorkspacePath(root, join5("measurements", saveFile), [".mdat"]);
   if (await pathExists(path)) throw new Error("Refusing to overwrite an existing MDAT");
   const entries = measurementEntries(await rew("/measurements"));
   return bindPlan({ kind: "rew-save-all", createdAt: (/* @__PURE__ */ new Date()).toISOString(), home, path, note, measurementSetHash: stableToken(entries.map(([id, value]) => [id, value?.title || null])) });
@@ -23658,7 +23775,7 @@ server.tool("rew_save_all_execute", "Execute and verify an exact REW Save-all pl
   if (path !== p.path || await pathExists(path)) throw new Error("Save target changed or already exists");
   const entries = measurementEntries(await rew("/measurements"));
   if (stableToken(entries.map(([id, value]) => [id, value?.title || null])) !== p.measurementSetHash) throw new Error("REW measurement set changed after planning");
-  await mkdir4(dirname4(path), { recursive: true });
+  await mkdir5(dirname5(path), { recursive: true });
   await rew("/measurements/command", { method: "POST", body: { command: "Save all", parameters: [path, p.note] }, timeoutMs: 12e4 });
   const file = await hashFile(path);
   return ok({ saved: path, ...file });
@@ -23759,19 +23876,19 @@ server.tool("audio_guided_session_execute", "Open an exact guided session record
   const p = verifyPlan(plan, confirmationToken);
   if (p.kind !== "guided-audio-session") throw new Error("Wrong plan kind");
   const root = await workspaceRoot(p.home), slug = p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "session", stamp = p.createdAt.replace(/[:.]/g, "-");
-  const path = await safeWorkspacePath(root, join4("sessions", `${slug}-${stamp}.json`), [".json"]);
-  await mkdir4(dirname4(path), { recursive: true });
+  const path = await safeWorkspacePath(root, join5("sessions", `${slug}-${stamp}.json`), [".json"]);
+  await mkdir5(dirname5(path), { recursive: true });
   const session = { ...p, state: "active", currentStage: p.stages[0], completedStages: [], nextTools: GUIDED_STAGE_TOOLS[p.stages[0]], sourcePlanHash: confirmationToken, updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
-  await writeFile2(path, JSON.stringify(session, null, 2) + "\n", { flag: "wx" });
+  await writeFile3(path, JSON.stringify(session, null, 2) + "\n", { flag: "wx" });
   return ok({ sessionFile: relative2(root, path), session, audibleAction: false });
 }));
 server.tool("audio_session_status", "Read a workspace-contained guided calibration session.", { home: external_exports.string().optional(), sessionFile: external_exports.string() }, guarded(async ({ home, sessionFile }) => {
   const root = await workspaceRoot(home), path = await safeWorkspacePath(root, sessionFile, [".json"]);
-  return ok(JSON.parse(await readFile4(path, "utf8")));
+  return ok(JSON.parse(await readFile5(path, "utf8")));
 }));
 var sessionEvidenceSchema = external_exports.object({ accepted: external_exports.boolean(), summary: external_exports.string().min(1).max(1e3), artifactRefs: external_exports.array(external_exports.string().min(1).max(300)).max(20).default([]) });
 server.tool("audio_session_advance_plan", "Bind completion of the current guided stage to concise evidence without changing the session.", { home: external_exports.string().optional(), sessionFile: external_exports.string(), completedStage: external_exports.string().min(1).max(100), evidence: sessionEvidenceSchema }, guarded(async (args) => {
-  const root = await workspaceRoot(args.home), path = await safeWorkspacePath(root, args.sessionFile, [".json"]), raw = await readFile4(path, "utf8"), session = JSON.parse(raw);
+  const root = await workspaceRoot(args.home), path = await safeWorkspacePath(root, args.sessionFile, [".json"]), raw = await readFile5(path, "utf8"), session = JSON.parse(raw);
   if (session.state !== "active") throw new Error("Session is not active");
   if (session.currentStage !== args.completedStage) throw new Error(`Current stage is ${session.currentStage}`);
   if (!args.evidence.accepted) throw new Error("A rejected stage cannot advance; resolve it and submit new evidence");
@@ -23783,18 +23900,18 @@ server.tool("audio_session_advance_execute", "Advance one exact guided stage, pr
   if (p.kind !== "guided-session-advance") throw new Error("Wrong plan kind");
   const root = await workspaceRoot(p.home), path = await safeWorkspacePath(root, p.sessionFile, [".json"]);
   if (path !== p.path) throw new Error("Session path changed after planning");
-  const raw = await readFile4(path, "utf8");
+  const raw = await readFile5(path, "utf8");
   if (stableToken(raw) !== p.sessionHash) throw new Error("Session changed after planning");
   const session = JSON.parse(raw);
   if (session.currentStage !== p.completedStage) throw new Error("Session stage changed after planning");
   const index = session.stages.indexOf(p.completedStage), nextStage = session.stages[index + 1] || null;
   const updated = { ...session, state: nextStage ? "active" : "complete", currentStage: nextStage, completedStages: [...session.completedStages, { stage: p.completedStage, evidence: p.evidence, completedAt: (/* @__PURE__ */ new Date()).toISOString() }], nextTools: nextStage ? GUIDED_STAGE_TOOLS[nextStage] : [], updatedAt: (/* @__PURE__ */ new Date()).toISOString() };
-  const backup = await safeWorkspacePath(root, join4("backups", `${basename(path, ".json")}-before-${p.completedStage}-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`), [".json"]);
-  await mkdir4(dirname4(backup), { recursive: true });
+  const backup = await safeWorkspacePath(root, join5("backups", `${basename(path, ".json")}-before-${p.completedStage}-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`), [".json"]);
+  await mkdir5(dirname5(backup), { recursive: true });
   await copyFile3(path, backup);
   try {
-    await writeFile2(path, JSON.stringify(updated, null, 2) + "\n");
-    const verified = JSON.parse(await readFile4(path, "utf8"));
+    await writeFile3(path, JSON.stringify(updated, null, 2) + "\n");
+    const verified = JSON.parse(await readFile5(path, "utf8"));
     if (verified.currentStage !== nextStage || verified.completedStages.length !== updated.completedStages.length) throw new Error("Session advance verification failed");
     return ok({ sessionFile: p.sessionFile, backup, state: verified.state, currentStage: verified.currentStage, nextTools: verified.nextTools });
   } catch (error2) {
@@ -23824,7 +23941,7 @@ server.tool("rew_diagnostic_execute", "Execute an exact live REW diagnostic plan
 server.tool("audio_filter_export_plan", "Create a hash-bound cross-platform filter export plan.", { filters: external_exports.array(filterSchema2).max(40), format: external_exports.enum(["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"]), file: external_exports.string().regex(/^[A-Za-z0-9._-]+$/), home: external_exports.string().optional() }, guarded(async (args) => {
   const extension = args.format === "json" ? ".json" : args.format === "camilladsp-yaml" ? ".yaml" : ".txt";
   if (!args.file.toLowerCase().endsWith(extension)) throw new Error(`Export file must end with ${extension}`);
-  const root = await workspaceRoot(args.home), path = await safeWorkspacePath(root, join4("filters", args.file), [extension]);
+  const root = await workspaceRoot(args.home), path = await safeWorkspacePath(root, join5("filters", args.file), [extension]);
   return ok(bindPlan({ kind: "filter-export", createdAt: (/* @__PURE__ */ new Date()).toISOString(), format: args.format, filters: args.filters, path, home: args.home }));
 }));
 server.tool("audio_filter_export_execute", "Write and verify an exact cross-platform filter export.", planSchema, guarded(async ({ plan, confirmationToken, confirm }) => {
@@ -23834,9 +23951,9 @@ server.tool("audio_filter_export_execute", "Write and verify an exact cross-plat
   const root = await workspaceRoot(p.home);
   if (p.path !== await safeWorkspacePath(root, relative2(root, p.path), [p.format === "json" ? ".json" : p.format === "camilladsp-yaml" ? ".yaml" : ".txt"])) throw new Error("Export path verification failed");
   const content = exportFilters(p.filters, p.format);
-  await mkdir4(dirname4(p.path), { recursive: true });
+  await mkdir5(dirname5(p.path), { recursive: true });
   await writeAtomicSet([[p.path, content]], confirmationToken);
-  const verified = await readFile4(p.path, "utf8");
+  const verified = await readFile5(p.path, "utf8");
   if (verified !== content) throw new Error("Filter export verification failed");
   return ok({ exported: p.path, format: p.format, bytes: Buffer.byteLength(content), contentHash: bindPlan({ content }).confirmationToken });
 }));
@@ -23851,7 +23968,7 @@ server.tool("audio_report_plan", "Create a hash-bound Markdown, HTML, and JSON r
   const reportArgs = { ...args, resolutionViews };
   renderHumanReport(reportArgs);
   const root = await workspaceRoot(args.home), paths = {};
-  for (const ext of [".md", ".html", ".json"]) paths[ext] = await safeWorkspacePath(root, join4("reports", `${args.baseName}${ext}`), [ext]);
+  for (const ext of [".md", ".html", ".json"]) paths[ext] = await safeWorkspacePath(root, join5("reports", `${args.baseName}${ext}`), [ext]);
   return ok(bindPlan({ kind: "audio-report", createdAt: (/* @__PURE__ */ new Date()).toISOString(), ...reportArgs, paths }));
 }));
 server.tool("audio_report_execute", "Write and verify an exact human-readable and machine-readable calibration report set.", planSchema, guarded(async ({ plan, confirmationToken, confirm }) => {
@@ -23859,20 +23976,20 @@ server.tool("audio_report_execute", "Write and verify an exact human-readable an
   const p = verifyPlan(plan, confirmationToken);
   if (p.kind !== "audio-report") throw new Error("Wrong plan kind");
   const report = renderHumanReport(p), root = await workspaceRoot(p.home);
-  await mkdir4(join4(root, "reports"), { recursive: true });
+  await mkdir5(join5(root, "reports"), { recursive: true });
   const values = { ".md": report.markdown, ".html": report.html, ".json": JSON.stringify(report.json, null, 2) + "\n" }, entries = [];
   for (const [ext, path] of Object.entries(p.paths)) {
     if (path !== await safeWorkspacePath(root, relative2(root, path), [ext])) throw new Error("Report path verification failed");
     entries.push([path, values[ext]]);
   }
   await writeAtomicSet(entries, confirmationToken);
-  const parsed = JSON.parse(await readFile4(p.paths[".json"], "utf8"));
+  const parsed = JSON.parse(await readFile5(p.paths[".json"], "utf8"));
   if (parsed.schemaVersion !== 2) throw new Error("Report verification failed");
   return ok({ written: p.paths, schemaVersion: parsed.schemaVersion });
 }));
 var profileSchema = external_exports.object({ id: external_exports.string().regex(/^[a-z0-9][a-z0-9_-]{1,63}$/), deviceClass: external_exports.enum(["laptop", "car", "general"]), manufacturer: external_exports.string().max(100).optional(), model: external_exports.string().max(150).optional(), role: external_exports.string().max(80), f3Hz: external_exports.number().positive().optional(), sensitivityDb: external_exports.number().optional(), nominalImpedanceOhm: external_exports.number().positive().optional(), maxSplDb: external_exports.number().positive().optional(), listeningDistanceM: external_exports.number().positive().optional(), coordinatesM: external_exports.object({ x: external_exports.number(), y: external_exports.number(), z: external_exports.number() }).optional(), source: external_exports.string().max(300).optional(), notes: external_exports.string().max(1e3).optional() });
 var speakerProfilePlan = async ({ home, profile }) => {
-  const root = await workspaceRoot(home), path = await safeWorkspacePath(root, join4("profiles", `${profile.id}.json`), [".json"]), before = await readFile4(path, "utf8").catch((error2) => error2.code === "ENOENT" ? null : Promise.reject(error2)), content = JSON.stringify({ ...profile, updatedAt: (/* @__PURE__ */ new Date()).toISOString(), uncertainty: profile.source ? "user_or_source_supplied" : "unverified_user_profile" }, null, 2) + "\n";
+  const root = await workspaceRoot(home), path = await safeWorkspacePath(root, join5("profiles", `${profile.id}.json`), [".json"]), before = await readFile5(path, "utf8").catch((error2) => error2.code === "ENOENT" ? null : Promise.reject(error2)), content = JSON.stringify({ ...profile, updatedAt: (/* @__PURE__ */ new Date()).toISOString(), uncertainty: profile.source ? "user_or_source_supplied" : "unverified_user_profile" }, null, 2) + "\n";
   return bindPlan({ kind: "speaker-profile-save", createdAt: (/* @__PURE__ */ new Date()).toISOString(), home, profile, path, beforeHash: before === null ? null : stableToken(before), content });
 };
 server.tool("speaker_profile_save", "Deprecated compatibility alias: create a hash-bound speaker-profile save plan; execute it with speaker_profile_save_execute.", { home: external_exports.string().optional(), profile: profileSchema }, guarded(async (args) => ok(await speakerProfilePlan(args))));
@@ -23881,32 +23998,32 @@ server.tool("speaker_profile_save_execute", "Save an exact speaker profile with 
   if (!confirm) throw new Error("Explicit confirmation required");
   const p = verifyPlan(plan, confirmationToken);
   if (p.kind !== "speaker-profile-save") throw new Error("Wrong plan kind");
-  const root = await workspaceRoot(p.home), path = await safeWorkspacePath(root, join4("profiles", `${p.profile.id}.json`), [".json"]);
+  const root = await workspaceRoot(p.home), path = await safeWorkspacePath(root, join5("profiles", `${p.profile.id}.json`), [".json"]);
   if (path !== p.path) throw new Error("Profile path changed after planning");
-  const current = await readFile4(path, "utf8").catch((error2) => error2.code === "ENOENT" ? null : Promise.reject(error2));
+  const current = await readFile5(path, "utf8").catch((error2) => error2.code === "ENOENT" ? null : Promise.reject(error2));
   if ((current === null ? null : stableToken(current)) !== p.beforeHash) throw new Error("Profile changed after planning");
-  await mkdir4(dirname4(path), { recursive: true });
-  const backup = current === null ? null : await safeWorkspacePath(root, join4("backups", `${p.profile.id}-profile-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`), [".json"]);
+  await mkdir5(dirname5(path), { recursive: true });
+  const backup = current === null ? null : await safeWorkspacePath(root, join5("backups", `${p.profile.id}-profile-${(/* @__PURE__ */ new Date()).toISOString().replace(/[:.]/g, "-")}.json`), [".json"]);
   if (backup) {
-    await mkdir4(dirname4(backup), { recursive: true });
-    await writeFile2(backup, current, { flag: "wx" });
+    await mkdir5(dirname5(backup), { recursive: true });
+    await writeFile3(backup, current, { flag: "wx" });
   }
   try {
     if (current === null) await writeAtomicSet([[path, p.content]], confirmationToken);
-    else await writeFile2(path, p.content);
-    const verified = await readFile4(path, "utf8");
+    else await writeFile3(path, p.content);
+    const verified = await readFile5(path, "utf8");
     if (verified !== p.content) throw new Error("Profile verification failed");
     return ok({ saved: path, backup, contentHash: stableToken(verified), profile: p.profile });
   } catch (error2) {
     if (backup) await copyFile3(backup, path);
-    else await unlink2(path).catch(() => {
+    else await unlink3(path).catch(() => {
     });
     throw new Error(`${error2.message}; profile state restored`);
   }
 }));
 server.tool("speaker_profile_get", "Read a workspace speaker profile.", { home: external_exports.string().optional(), id: external_exports.string().regex(/^[a-z0-9][a-z0-9_-]{1,63}$/) }, guarded(async ({ home, id }) => {
-  const root = await workspaceRoot(home), path = await safeWorkspacePath(root, join4("profiles", `${id}.json`), [".json"]);
-  return ok(JSON.parse(await readFile4(path, "utf8")));
+  const root = await workspaceRoot(home), path = await safeWorkspacePath(root, join5("profiles", `${id}.json`), [".json"]);
+  return ok(JSON.parse(await readFile5(path, "utf8")));
 }));
 server.tool("car_channel_map_validate", "Validate a car-audio DSP channel map and flag missing protective crossovers, duplicate outputs, and invalid passbands.", {
   channels: external_exports.array(external_exports.object({ output: external_exports.string().min(1).max(80), role: external_exports.string().min(1).max(80), driverType: external_exports.enum(["tweeter", "midrange", "midbass", "subwoofer", "fullrange"]), highPassHz: external_exports.number().nonnegative().optional(), lowPassHz: external_exports.number().positive().optional(), polarityInverted: external_exports.boolean().default(false), amplifier: external_exports.string().max(120).optional(), coordinatesM: external_exports.object({ x: external_exports.number(), y: external_exports.number(), z: external_exports.number() }).optional() })).min(1).max(32)
@@ -23928,7 +24045,7 @@ server.tool("jamesdsp_status", "Detect JDSP4Linux and decode engine, master-bypa
 server.tool("jamesdsp_snapshot", "Fingerprint the live JamesDSP configuration and identify the exact active preset and effective EQ/bypass state without changing anything.", {}, guarded(async () => {
   const status = await jamesDspStatus();
   if (!status.available) throw new Error(status.reason);
-  const config2 = await readFile4(status.configPath, "utf8");
+  const config2 = await readFile5(status.configPath, "utf8");
   const keys = config2.split("\n").filter((x) => /^[a-z0-9_]+=/.test(x)).map((x) => x.slice(0, x.indexOf("=")));
   return ok({ ...status, configurationKeys: keys, configurationBytes: Buffer.byteLength(config2) });
 }));
@@ -23954,13 +24071,13 @@ server.tool("jamesdsp_preset_execute", "Back up JamesDSP, execute an exact prese
     const verified = await jamesDspStatus();
     if (p.action === "save" && !String(verified.presets || "").split(/\r?\n/).includes(p.presetName)) throw new Error("JamesDSP preset save verification failed");
     if (p.action === "load") {
-      const presetPath = join4(dirname4(status.configPath), "presets", `${p.presetName}.conf`), [active, preset] = await Promise.all([readFile4(status.configPath, "utf8"), readFile4(presetPath, "utf8")]);
+      const presetPath = join5(dirname5(status.configPath), "presets", `${p.presetName}.conf`), [active, preset] = await Promise.all([readFile5(status.configPath, "utf8"), readFile5(presetPath, "utf8")]);
       if (active.trim() !== preset.trim()) throw new Error("JamesDSP preset load verification failed");
     }
     return ok({ applied: true, action: p.action, presetName: p.presetName, backup, commandWarning, verified, rollback: { activeConfigurationBackup: backup } });
   } catch (error2) {
     await copyFile3(backup, status.configPath);
-    const restored = await readFile4(status.configPath, "utf8"), source = await readFile4(backup, "utf8");
+    const restored = await readFile5(status.configPath, "utf8"), source = await readFile5(backup, "utf8");
     if (restored !== source) throw new Error(`${error2.message}; automatic rollback verification also failed`);
     throw new Error(`${error2.message}; active JamesDSP configuration restored from backup`);
   }
@@ -23992,7 +24109,7 @@ server.tool("jamesdsp_key_execute", "Back up JamesDSP, apply one exact key chang
     return ok({ applied: true, key: p.key, before: p.before, after, backup, commandWarning, rollback: { key: p.key, value: p.before, activeConfigurationBackup: backup } });
   } catch (error2) {
     await copyFile3(backup, p.configPath);
-    const restored = await readFile4(p.configPath, "utf8"), source = await readFile4(backup, "utf8");
+    const restored = await readFile5(p.configPath, "utf8"), source = await readFile5(backup, "utf8");
     if (restored !== source) throw new Error(`${error2.message}; automatic rollback verification also failed`);
     throw new Error(`${error2.message}; active JamesDSP configuration restored from backup`);
   }
