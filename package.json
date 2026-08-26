@@ -3,7 +3,21 @@
   "version": "0.1.0-beta.1",
   "private": true,
   "type": "module",
-  "description": "Cross-platform MCP server for REW-driven speaker calibration",
+  "description": "Cross-platform Model Context Protocol server for Room EQ Wizard measurements, speaker calibration, conservative EQ, and DSP verification",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "rew",
+    "room-eq-wizard",
+    "audio-calibration",
+    "speaker-calibration",
+    "room-correction",
+    "acoustic-measurement",
+    "digital-signal-processing",
+    "equalization",
+    "subwoofer-integration",
+    "jamesdsp"
+  ],
   "author": "daredoole",
   "license": "MIT",
   "repository": {

@@ -1,9 +1,10 @@
 # Audio Calibration MCP
 
-Local-first, cross-platform REW measurement and calibration tooling for general,
-powered-speaker, car, and laptop audio systems. It combines guarded measurement,
-raw and perceptual analysis, repeated/held-out EQ validation, DSP export/apply
-adapters, and measured post-change verification.
+Audio Calibration MCP is a local-first, cross-platform Model Context Protocol
+server for Room EQ Wizard (REW). It guides acoustic measurement, speaker and
+room calibration, subwoofer and crossover analysis, conservative EQ, DSP
+deployment, and measured verification for general, powered-speaker, car, and
+laptop audio systems.
 
 This project does not promise universally “perfect” sound. REW can measure an
 acoustic system; it cannot infer listener preference, microphone placement, or a

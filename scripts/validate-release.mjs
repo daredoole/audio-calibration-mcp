@@ -3,7 +3,8 @@ import { access, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { resolve } from "node:path";
 
-const requiredMetadata = ["license", "repository", "bugs", "homepage", "files"];
+const requiredMetadata = ["license", "repository", "bugs", "homepage", "files", "keywords"];
+const requiredKeywords = ["mcp", "model-context-protocol", "rew", "room-eq-wizard", "audio-calibration"];
 const requiredFiles = [
   "dist/server.mjs", "dist/cli.cjs", ".mcp.json", ".codex-plugin/plugin.json", "LICENSE",
   "README.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md"
@@ -11,6 +12,9 @@ const requiredFiles = [
 
 const pkg = JSON.parse(await readFile("package.json", "utf8"));
 for (const key of requiredMetadata) if (!pkg[key]) throw new Error(`package.json missing ${key}`);
+if (!Array.isArray(pkg.keywords) || pkg.keywords.length < 8 || pkg.keywords.length > 16) throw new Error("package.json keywords must contain 8-16 focused terms");
+if (new Set(pkg.keywords).size !== pkg.keywords.length) throw new Error("package.json keywords must be unique");
+for (const keyword of requiredKeywords) if (!pkg.keywords.includes(keyword)) throw new Error(`package.json missing discovery keyword ${keyword}`);
 for (const file of requiredFiles) await access(file);
 
 const plugin = JSON.parse(await readFile(".codex-plugin/plugin.json", "utf8"));
