@@ -29,13 +29,15 @@ Download a GitHub release archive and point Codex at its `.mcp.json`. For a sour
 checkout:
 
 ```text
-npm ci
+npm ci --ignore-scripts
 npm test
-npm run build
 npm run validate:release
 ```
 
-The checked-in MCP configuration starts `dist/server.mjs`. Run
+The checked-in MCP configuration starts the self-contained `dist/server.mjs`.
+The packaged CLI is also bundled, and the published artifact declares zero
+runtime npm dependencies. Third-party build inputs are exact-pinned and installed
+with lifecycle scripts disabled. Run
 `rew_install_discover` to locate REW through a user override, the
 `AUDIO_REW_EXECUTABLE` environment variable, `PATH`, and conventional Windows,
 macOS, or Linux locations. If discovery fails, pass the absolute executable path

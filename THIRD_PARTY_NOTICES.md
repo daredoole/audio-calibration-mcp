@@ -1,6 +1,6 @@
 # Third-party notices
 
-The distributed server bundles the following direct dependencies. Their own
+The distributed server and CLI bundle the following direct dependencies. Their own
 license files remain authoritative.
 
 - `@modelcontextprotocol/sdk` — MIT License

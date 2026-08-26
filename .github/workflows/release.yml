@@ -11,16 +11,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with: { node-version: 22 }
-      - run: npm ci
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - run: npm ci --ignore-scripts
+      - run: npm run security:verify
       - run: npm test
       - run: npm run validate:release
       - run: npm pack
       - run: npm sbom --sbom-format cyclonedx > audio-calibration-sbom.json
       - run: sha256sum audio-calibration-mcp-*.tgz audio-calibration-sbom.json > SHA256SUMS
-      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+      - uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
         with:
           subject-path: audio-calibration-mcp-*.tgz
       - name: Verify packed archive
@@ -29,6 +33,7 @@ jobs:
           tar -xzf audio-calibration-mcp-*.tgz -C release-smoke
           cd release-smoke/package
           node scripts/validate-release.mjs
+          node dist/cli.cjs capabilities '{}'
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: audio-calibration-release

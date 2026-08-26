@@ -2,6 +2,7 @@ node_modules/
 graphify-out/
 dist/*
 !dist/server.mjs
+!dist/cli.cjs
 coverage/
 *.tgz
 *.log

@@ -5,8 +5,11 @@ import { readFile } from "node:fs/promises";
 test("plugin manifest and MCP launch target are coherent", async () => {
   const plugin = JSON.parse(await readFile(new URL("../.codex-plugin/plugin.json", import.meta.url)));
   const mcp = JSON.parse(await readFile(new URL("../.mcp.json", import.meta.url)));
+  const pkg = JSON.parse(await readFile(new URL("../package.json", import.meta.url)));
   assert.equal(plugin.name, "audio-calibration"); assert.equal(plugin.mcpServers, "./.mcp.json");
   assert.equal(mcp.mcpServers["audio-calibration"].args[0], "./dist/server.mjs");
+  assert.equal(pkg.dependencies, undefined); assert.equal(pkg.bin["audio-calibration"], "./dist/cli.cjs");
+  assert.ok(Object.values(pkg.devDependencies).every(version => /^\d+\.\d+\.\d+$/.test(version)));
 });
 
 test("server module imports without starting stdio in test mode", async () => {

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 const requiredMetadata = ["license", "repository", "bugs", "homepage", "files"];
 const requiredFiles = [
-  "dist/server.mjs", ".mcp.json", ".codex-plugin/plugin.json", "LICENSE",
+  "dist/server.mjs", "dist/cli.cjs", ".mcp.json", ".codex-plugin/plugin.json", "LICENSE",
   "README.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md"
 ];
 
@@ -17,6 +17,8 @@ const plugin = JSON.parse(await readFile(".codex-plugin/plugin.json", "utf8"));
 const mcp = JSON.parse(await readFile(".mcp.json", "utf8"));
 if (plugin.mcpServers !== "./.mcp.json") throw new Error("Plugin MCP path mismatch");
 if (mcp.mcpServers?.["audio-calibration"]?.args?.[0] !== "./dist/server.mjs") throw new Error("MCP launch target mismatch");
+if (pkg.bin?.["audio-calibration"] !== "./dist/cli.cjs") throw new Error("CLI launch target must use the bundled artifact");
+if (pkg.dependencies && Object.keys(pkg.dependencies).length) throw new Error("Published package must not install runtime dependencies");
 if (!plugin.version.startsWith(pkg.version)) throw new Error("Plugin and package versions differ");
 
 const child = spawn(process.execPath, [resolve("dist/server.mjs")], { env: { ...process.env, NODE_ENV: "production" }, stdio: ["pipe", "pipe", "pipe"] });

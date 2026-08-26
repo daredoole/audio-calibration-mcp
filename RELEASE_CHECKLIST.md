@@ -11,6 +11,9 @@
 - [x] Path traversal, UNC/drive, symlink, hardlink, and parser fuzz tests
 - [x] Confirmation-bypass, backup, stale-plan, verification, and rollback tests
 - [x] Package dry-run, license/notices, SBOM, checksums, and build attestation
+- [x] Zero-runtime-dependency package with bundled server and CLI
+- [x] Scriptless clean install plus npm registry-signature/provenance verification
+- [x] Vulnerability alerts, Dependabot security updates, and immutable releases
 - [x] Plugin and skill validators
 - [x] No raw measurements, sessions, backups, profiles, reports, or filters in git
 

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 
 const aliases = {
   capabilities: "audio_capabilities", host: "audio_host_inventory", workspace: "audio_workspace_scan", rew: "rew_probe", "rew-audio": "rew_audio_inventory", jamesdsp: "jamesdsp_status",
@@ -14,8 +13,12 @@ const aliases = {
 const [command = "help", json = "{}"] = process.argv.slice(2);
 if (command === "help") { console.log(`Usage: audio-calibration <${Object.keys(aliases).sort().join("|")}|tool-name> ['{"arg":"value"}']`); process.exit(0); }
 let args; try { args = JSON.parse(json); } catch { console.error("Arguments must be a JSON object"); process.exit(2); }
-const serverPath = fileURLToPath(new URL("../dist/server.mjs", import.meta.url)), defaultWorkspace = fileURLToPath(new URL("../../..", import.meta.url));
-const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath], env: { ...process.env, AUDIO_CALIBRATION_HOME: process.env.AUDIO_CALIBRATION_HOME || resolve(defaultWorkspace) } });
-const client = new Client({ name: "audio-calibration-cli", version: "0.1.0-beta.1" }); await client.connect(transport);
-try { const response = await client.callTool({ name: aliases[command] || command, arguments: args }); console.log(response.content?.[0]?.text || JSON.stringify(response)); if (response.isError) process.exitCode = 1; }
-finally { await client.close(); }
+async function main() {
+  const cliDir = dirname(resolve(process.argv[1])), serverPath = resolve(cliDir, "server.mjs"), defaultWorkspace = resolve(cliDir, "../../..");
+  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath], env: { ...process.env, AUDIO_CALIBRATION_HOME: process.env.AUDIO_CALIBRATION_HOME || defaultWorkspace } });
+  const client = new Client({ name: "audio-calibration-cli", version: "0.1.0-beta.1" }); await client.connect(transport);
+  try { const response = await client.callTool({ name: aliases[command] || command, arguments: args }); console.log(response.content?.[0]?.text || JSON.stringify(response)); if (response.isError) process.exitCode = 1; }
+  finally { await client.close(); }
+}
+
+main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; });
