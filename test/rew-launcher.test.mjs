@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverRewInstall, launchRew, revalidateRewCandidate, rewLauncherInternals } from "../lib/rew-launcher.mjs";
@@ -26,6 +26,6 @@ test("REW launch revalidates the executable, detaches safely, and waits for API 
   const discovery = await discoverRewInstall({ explicitPath: executable, platform: "linux", pathLookup: async () => [] });
   let probes = 0, spawnCall = null, unref = false;
   const result = await launchRew({ candidate: discovery.selected, platform: "linux", timeoutMs: 1500, probe: async () => { if (++probes < 2) throw new Error("offline"); return { version: "test" }; }, spawnImpl: (command, args, options) => { spawnCall = { command, args, options }; return { pid: 1234, unref: () => { unref = true; } }; } });
-  assert.equal(result.apiReady, true); assert.equal(result.launched, true); assert.equal(spawnCall.command, executable); assert.equal(spawnCall.options.shell, false); assert.equal(unref, true);
+  assert.equal(result.apiReady, true); assert.equal(result.launched, true); assert.equal(spawnCall.command, await realpath(executable)); assert.equal(spawnCall.options.shell, false); assert.equal(unref, true);
   await writeFile(executable, "#!/bin/sh\necho changed\n"); await assert.rejects(revalidateRewCandidate(discovery.selected, "linux"), /changed after planning/);
 });
