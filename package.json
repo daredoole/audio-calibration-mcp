@@ -20,7 +20,9 @@
     "dist/server.mjs",
     "scripts/audio-calibration-cli.mjs",
     "scripts/validate-release.mjs",
+    "scripts/verify-reference-corpus.mjs",
     "skills/",
+    "fixtures/reference/",
     "LICENSE",
     "README.md",
     "RELEASE_CHECKLIST.md",
@@ -40,6 +42,7 @@
     "precoverage": "npm run build",
     "coverage": "c8 --check-coverage --lines 80 --statements 80 --functions 70 --branches 60 --reporter=text-summary --include=core.mjs --include=human-listening.mjs --include=advanced-calibration.mjs --include=lib/*.mjs --include=tool-domains/*.mjs --exclude=server.mjs --exclude=dist/** node --test",
     "validate:release": "node scripts/validate-release.mjs",
+    "corpus:verify": "node scripts/verify-reference-corpus.mjs",
     "pack:check": "npm pack --dry-run",
     "prepack": "npm run build && npm run validate:release",
     "cli": "node scripts/audio-calibration-cli.mjs"

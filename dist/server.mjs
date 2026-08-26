@@ -21540,9 +21540,9 @@ function multiseatMetrics(traces, lowHz = 20, highHz = 300, roomVolumeM3, rt60Se
   for (let f = lowHz; f <= highHz; f *= 2 ** (1 / 12)) {
     const levels = traces.map((t) => interpolate(frequencyAxis(t, parseSeries(t.magnitude).length), parseSeries(t.magnitude), f)).filter(Number.isFinite);
     if (levels.length < 2) continue;
-    const mean3 = levels.reduce((a, b) => a + b, 0) / levels.length, med = median(levels);
-    const sd = Math.sqrt(levels.reduce((s, x) => s + (x - mean3) ** 2, 0) / levels.length);
-    rows.push({ frequencyHz: Math.round(f * 10) / 10, meanDb: mean3, spreadDb: Math.max(...levels) - Math.min(...levels), standardDeviationDb: sd, outlierSeatIndices: levels.map((x, i) => Math.abs(x - med) > 6 ? i : -1).filter((i) => i >= 0) });
+    const mean6 = levels.reduce((a, b) => a + b, 0) / levels.length, med = median(levels);
+    const sd = Math.sqrt(levels.reduce((s, x) => s + (x - mean6) ** 2, 0) / levels.length);
+    rows.push({ frequencyHz: Math.round(f * 10) / 10, meanDb: mean6, spreadDb: Math.max(...levels) - Math.min(...levels), standardDeviationDb: sd, outlierSeatIndices: levels.map((x, i) => Math.abs(x - med) > 6 ? i : -1).filter((i) => i >= 0) });
   }
   const schroederHz = roomVolumeM3 && rt60Seconds ? 2e3 * Math.sqrt(rt60Seconds / roomVolumeM3) : null;
   return { schroederHz, medianSpreadDb: median(rows.map((x) => x.spreadDb)), modalCandidates: rows.filter((x) => x.spreadDb >= 8 || x.standardDeviationDb >= 3).sort((a, b) => b.spreadDb - a.spreadDb).slice(0, 12), seatOutlierCounts: traces.map((_, i) => rows.filter((r) => r.outlierSeatIndices.includes(i)).length), rows };
@@ -21819,11 +21819,11 @@ function magnitudeTrace(trace) {
   return trace?.frequencyResponse || trace;
 }
 function traceSamples(trace, lowHz, highHz, ppo = 12) {
-  const source = magnitudeTrace(trace), magnitude = parseSeries(source?.magnitude), frequencies = frequencyAxis(source || {}, magnitude.length), rows = [];
-  if (!magnitude.length || !frequencies.length) return rows;
+  const source = magnitudeTrace(trace), magnitude2 = parseSeries(source?.magnitude), frequencies = frequencyAxis(source || {}, magnitude2.length), rows = [];
+  if (!magnitude2.length || !frequencies.length) return rows;
   for (let f = lowHz; f <= highHz * 1.000001; f *= 2 ** (1 / ppo)) {
     if (f < frequencies[0] || f > frequencies.at(-1)) continue;
-    const level = interpolate(frequencies, magnitude, f);
+    const level = interpolate(frequencies, magnitude2, f);
     if (Number.isFinite(level)) rows.push({ frequencyHz: f, levelDb: level });
   }
   return rows;
@@ -22026,9 +22026,9 @@ var escapeHtml = (value) => String(value).replace(/[&<>"']/g, (c) => ({ "&": "&a
 function resolutionChartSvg(views) {
   const definitions = [["raw", "Raw / unsmoothed", "#d9485f"], ["minimal", "1/48 octave", "#2f77d0"], ["perceptual", "ERB perceptual", "#15956f"], ["adaptive", "Frequency-dependent", "#8b5cf6"]], series = definitions.map(([key, label, color]) => ({ key, label, color, rows: (views?.[key] || []).filter((x2) => Number.isFinite(x2.frequencyHz) && Number.isFinite(x2.levelDb) && x2.frequencyHz > 0) })).filter((x2) => x2.rows.length);
   if (!series.length) return "";
-  const all = series.flatMap((x2) => x2.rows), minF = Math.min(...all.map((x2) => x2.frequencyHz)), maxF = Math.max(...all.map((x2) => x2.frequencyHz)), minDb = Math.min(...all.map((x2) => x2.levelDb)) - 2, maxDb = Math.max(...all.map((x2) => x2.levelDb)) + 2, width = 920, height = 380, left = 56, right = 20, top = 24, bottom = 42, x = (f) => left + Math.log(f / minF) / Math.log(maxF / minF) * (width - left - right), y = (db) => top + (maxDb - db) / (maxDb - minDb || 1) * (height - top - bottom), downsample = (rows) => rows.length <= 600 ? rows : rows.filter((_, i) => i % Math.ceil(rows.length / 600) === 0);
+  const all = series.flatMap((x2) => x2.rows), minF = Math.min(...all.map((x2) => x2.frequencyHz)), maxF = Math.max(...all.map((x2) => x2.frequencyHz)), minDb = Math.min(...all.map((x2) => x2.levelDb)) - 2, maxDb = Math.max(...all.map((x2) => x2.levelDb)) + 2, width = 920, height = 380, left = 56, right = 20, top = 24, bottom = 42, x = (f) => left + Math.log(f / minF) / Math.log(maxF / minF) * (width - left - right), y = (db2) => top + (maxDb - db2) / (maxDb - minDb || 1) * (height - top - bottom), downsample = (rows) => rows.length <= 600 ? rows : rows.filter((_, i) => i % Math.ceil(rows.length / 600) === 0);
   const gridF = [20, 50, 100, 200, 500, 1e3, 2e3, 5e3, 1e4, 2e4].filter((f) => f >= minF && f <= maxF), gridDb = Array.from({ length: 7 }, (_, i) => minDb + i * (maxDb - minDb) / 6);
-  return `<figure><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Raw, lightly smoothed, perceptual, and frequency-dependent response curves" style="width:100%;height:auto;background:#fff;border:1px solid #ddd">${gridF.map((f) => `<line x1="${x(f)}" y1="${top}" x2="${x(f)}" y2="${height - bottom}" stroke="#e5e7eb"/><text x="${x(f)}" y="${height - 16}" text-anchor="middle" font-size="11">${f >= 1e3 ? `${f / 1e3}k` : f}</text>`).join("")}${gridDb.map((db) => `<line x1="${left}" y1="${y(db)}" x2="${width - right}" y2="${y(db)}" stroke="#eef0f2"/><text x="${left - 7}" y="${y(db) + 4}" text-anchor="end" font-size="11">${round(db, 1)}</text>`).join("")}${series.map((s) => `<polyline fill="none" stroke="${s.color}" stroke-width="2" points="${downsample(s.rows).map((p) => `${round(x(p.frequencyHz), 1)},${round(y(p.levelDb), 1)}`).join(" ")}"/>`).join("")}</svg><figcaption>${series.map((s) => `<span style="margin-right:1rem;color:${s.color}">\u25CF ${escapeHtml(s.label)}</span>`).join("")}</figcaption></figure>`;
+  return `<figure><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Raw, lightly smoothed, perceptual, and frequency-dependent response curves" style="width:100%;height:auto;background:#fff;border:1px solid #ddd">${gridF.map((f) => `<line x1="${x(f)}" y1="${top}" x2="${x(f)}" y2="${height - bottom}" stroke="#e5e7eb"/><text x="${x(f)}" y="${height - 16}" text-anchor="middle" font-size="11">${f >= 1e3 ? `${f / 1e3}k` : f}</text>`).join("")}${gridDb.map((db2) => `<line x1="${left}" y1="${y(db2)}" x2="${width - right}" y2="${y(db2)}" stroke="#eef0f2"/><text x="${left - 7}" y="${y(db2) + 4}" text-anchor="end" font-size="11">${round(db2, 1)}</text>`).join("")}${series.map((s) => `<polyline fill="none" stroke="${s.color}" stroke-width="2" points="${downsample(s.rows).map((p) => `${round(x(p.frequencyHz), 1)},${round(y(p.levelDb), 1)}`).join(" ")}"/>`).join("")}</svg><figcaption>${series.map((s) => `<span style="margin-right:1rem;color:${s.color}">\u25CF ${escapeHtml(s.label)}</span>`).join("")}</figcaption></figure>`;
 }
 function renderHumanReport({ title = "Audio Calibration Report", assessment, eq, listening, resolutionViews } = {}) {
   if (!assessment?.dimensions) throw new Error("A human-listening assessment is required");
@@ -22057,8 +22057,8 @@ var median2 = (values) => {
 var round2 = (value, digits = 2) => Number.isFinite(value) ? Number(value.toFixed(digits)) : null;
 var clamp2 = (value, low, high) => Math.max(low, Math.min(high, value));
 var magnitudeRows = (trace) => {
-  const magnitude = parseSeries(trace?.magnitude), frequencies = frequencyAxis(trace || {}, magnitude.length);
-  return magnitude.map((levelDb, i) => ({ frequencyHz: frequencies[i], levelDb })).filter((x) => Number.isFinite(x.frequencyHz) && Number.isFinite(x.levelDb) && x.frequencyHz > 0);
+  const magnitude2 = parseSeries(trace?.magnitude), frequencies = frequencyAxis(trace || {}, magnitude2.length);
+  return magnitude2.map((levelDb, i) => ({ frequencyHz: frequencies[i], levelDb })).filter((x) => Number.isFinite(x.frequencyHz) && Number.isFinite(x.levelDb) && x.frequencyHz > 0);
 };
 function traceViewRows(trace, { lowHz = 20, highHz = 2e4, maxPoints = 600 } = {}) {
   const rows = magnitudeRows(trace).filter((x) => x.frequencyHz >= lowHz && x.frequencyHz <= highHz), stride = Math.max(1, Math.ceil(rows.length / maxPoints));
@@ -22913,6 +22913,416 @@ function registerAnalysisTools(server2, deps) {
   }));
 }
 
+// lib/measurement-science.mjs
+var finite2 = (value, name) => {
+  const number3 = Number(value);
+  if (!Number.isFinite(number3)) throw new Error(`${name} must be finite`);
+  return number3;
+};
+var mean3 = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+var variance = (values) => values.length < 2 ? 0 : values.reduce((sum, value) => sum + (value - mean3(values)) ** 2, 0) / (values.length - 1);
+var quantile = (values, p) => {
+  const sorted = [...values].sort((a, b) => a - b), position = (sorted.length - 1) * p;
+  const lower = Math.floor(position), fraction = position - lower;
+  return sorted[lower] + (sorted[Math.min(lower + 1, sorted.length - 1)] - sorted[lower]) * fraction;
+};
+var mulberry32 = (seed) => () => {
+  seed |= 0;
+  seed = seed + 1831565813 | 0;
+  let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+};
+var normalSample = (random) => {
+  const u = Math.max(Number.EPSILON, random()), v = random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+};
+function standardUncertainty(component) {
+  const magnitude2 = Math.abs(finite2(component.uncertainty, "uncertainty"));
+  if (component.distribution === "rectangular") return magnitude2 / Math.sqrt(3);
+  if (component.distribution === "triangular") return magnitude2 / Math.sqrt(6);
+  if (component.distribution === "normal") return magnitude2 / finite2(component.coverageFactor ?? 1, "coverageFactor");
+  throw new Error(`Unsupported uncertainty distribution: ${component.distribution}`);
+}
+function uncertaintyBudget(components, { coverageProbability = 0.95 } = {}) {
+  if (!Array.isArray(components) || components.length === 0) throw new Error("At least one uncertainty component is required");
+  const rows = components.map((component) => {
+    const sensitivity = finite2(component.sensitivity ?? 1, "sensitivity"), u = standardUncertainty(component), contribution = Math.abs(sensitivity * u);
+    return { name: component.name, distribution: component.distribution, sensitivity, standardUncertainty: u, contribution, degreesOfFreedom: component.degreesOfFreedom ?? null };
+  });
+  const combinedStandardUncertainty = Math.sqrt(rows.reduce((sum, row) => sum + row.contribution ** 2, 0));
+  const denominator = rows.reduce((sum, row) => row.degreesOfFreedom > 0 ? sum + row.contribution ** 4 / row.degreesOfFreedom : sum, 0);
+  const effectiveDegreesOfFreedom = denominator > 0 ? combinedStandardUncertainty ** 4 / denominator : Infinity;
+  const coverageFactor = coverageProbability === 0.95 ? effectiveDegreesOfFreedom < 5 ? 2.776 : effectiveDegreesOfFreedom < 10 ? 2.262 : effectiveDegreesOfFreedom < 30 ? 2.045 : 1.96 : 1;
+  return {
+    method: "JCGM-GUM linear propagation",
+    claimLevel: "standards-aligned",
+    coverageProbability,
+    components: rows,
+    combinedStandardUncertainty,
+    effectiveDegreesOfFreedom: Number.isFinite(effectiveDegreesOfFreedom) ? effectiveDegreesOfFreedom : null,
+    coverageFactor,
+    expandedUncertainty: combinedStandardUncertainty * coverageFactor,
+    boundary: "Conformance requires a complete traceable uncertainty budget, calibrated instrumentation, and the applicable normative procedure."
+  };
+}
+function monteCarloUncertainty(components, { trials = 2e4, seed = 1729, estimate = 0 } = {}) {
+  if (trials < 1e3 || trials > 2e5) throw new Error("trials must be between 1,000 and 200,000");
+  const random = mulberry32(seed), samples = new Array(trials);
+  for (let trial = 0; trial < trials; trial++) {
+    let value = estimate;
+    for (const component of components) {
+      const width = Math.abs(finite2(component.uncertainty, "uncertainty")), sensitivity = finite2(component.sensitivity ?? 1, "sensitivity");
+      let draw;
+      if (component.distribution === "normal") draw = normalSample(random) * width / finite2(component.coverageFactor ?? 1, "coverageFactor");
+      else if (component.distribution === "rectangular") draw = (random() * 2 - 1) * width;
+      else if (component.distribution === "triangular") draw = (random() - random()) * width;
+      else throw new Error(`Unsupported uncertainty distribution: ${component.distribution}`);
+      value += sensitivity * draw;
+    }
+    samples[trial] = value;
+  }
+  return { method: "JCGM 101 Monte Carlo propagation", claimLevel: "standards-aligned", trials, seed, mean: mean3(samples), standardUncertainty: Math.sqrt(variance(samples)), interval95: [quantile(samples, 0.025), quantile(samples, 0.975)] };
+}
+function bootstrapConfidence(values, { trials = 1e4, seed = 2718 } = {}) {
+  if (!Array.isArray(values) || values.length < 2) throw new Error("At least two repeat values are required");
+  const clean2 = values.map((value, index) => finite2(value, `values[${index}]`)), random = mulberry32(seed), estimates = [];
+  for (let trial = 0; trial < trials; trial++) estimates.push(mean3(clean2.map(() => clean2[Math.floor(random() * clean2.length)])));
+  return { estimate: mean3(clean2), repeatabilityStandardDeviation: Math.sqrt(variance(clean2)), trials, seed, confidenceInterval95: [quantile(estimates, 0.025), quantile(estimates, 0.975)] };
+}
+function complexTransferQuality(bins, options = {}) {
+  if (!Array.isArray(bins) || bins.length < 2) throw new Error("At least two transfer-function bins are required");
+  const thresholds = { minimumCoherence: options.minimumCoherence ?? 0.8, maximumPhaseUncertaintyDeg: options.maximumPhaseUncertaintyDeg ?? 20, maximumHarmonicContaminationDb: options.maximumHarmonicContaminationDb ?? -30, minimumInputPower: options.minimumInputPower ?? 1e-12 };
+  const rows = bins.map((bin, index) => {
+    const sxx = finite2(bin.inputPower, `bins[${index}].inputPower`), syy = finite2(bin.outputPower, `bins[${index}].outputPower`), crossReal = finite2(bin.crossReal, `bins[${index}].crossReal`), crossImag = finite2(bin.crossImag, `bins[${index}].crossImag`), averages = Math.max(1, Number(bin.averages ?? 1));
+    const coherence = Math.max(0, Math.min(1, (crossReal ** 2 + crossImag ** 2) / Math.max(Number.EPSILON, sxx * syy)));
+    const phaseUncertaintyDeg = Math.sqrt(Math.max(0, 1 - coherence) / Math.max(Number.EPSILON, 2 * coherence * averages)) * 180 / Math.PI;
+    const harmonicContaminationDb = bin.harmonicPower === void 0 ? null : 10 * Math.log10(Math.max(Number.EPSILON, finite2(bin.harmonicPower, "harmonicPower")) / Math.max(Number.EPSILON, syy));
+    const reasons = [];
+    if (sxx < thresholds.minimumInputPower) reasons.push("insufficient excitation");
+    if (coherence < thresholds.minimumCoherence) reasons.push("low coherence");
+    if (phaseUncertaintyDeg > thresholds.maximumPhaseUncertaintyDeg) reasons.push("phase confidence too low");
+    if (harmonicContaminationDb !== null && harmonicContaminationDb > thresholds.maximumHarmonicContaminationDb) reasons.push("harmonic contamination");
+    return { frequencyHz: finite2(bin.frequencyHz, "frequencyHz"), coherence, phaseUncertaintyDeg, harmonicContaminationDb, valid: reasons.length === 0, rejectionReasons: reasons };
+  });
+  const timing = (options.repeatTimingSeconds || []).map(Number), elapsed = (options.repeatElapsedSeconds || []).map(Number);
+  let clockDriftPpm = null;
+  if (timing.length >= 2 && timing.length === elapsed.length) {
+    const xMean = mean3(elapsed), yMean = mean3(timing), denominator = elapsed.reduce((sum, x) => sum + (x - xMean) ** 2, 0);
+    if (denominator > 0) clockDriftPpm = elapsed.reduce((sum, x, i) => sum + (x - xMean) * (timing[i] - yMean), 0) / denominator * 1e6;
+  }
+  const validFraction = rows.filter((row) => row.valid).length / rows.length;
+  return { claimLevel: "engineering-quality-screen", thresholds, bins: rows, validFraction, accepted: validFraction >= (options.minimumValidFraction ?? 0.9) && (clockDriftPpm === null || Math.abs(clockDriftPpm) <= (options.maximumClockDriftPpm ?? 100)), clockDriftPpm, automaticRejection: true };
+}
+var decayFit = (time3, decay, upperDb, lowerDb) => {
+  const points = decay.map((level, i) => ({ x: time3[i], y: level })).filter((point) => point.y <= upperDb && point.y >= lowerDb);
+  if (points.length < 3) return null;
+  const xMean = mean3(points.map((point) => point.x)), yMean = mean3(points.map((point) => point.y));
+  const sxx = points.reduce((sum, point) => sum + (point.x - xMean) ** 2, 0), slope = points.reduce((sum, point) => sum + (point.x - xMean) * (point.y - yMean), 0) / sxx, intercept = yMean - slope * xMean;
+  const residual = points.reduce((sum, point) => sum + (point.y - (intercept + slope * point.x)) ** 2, 0), total = points.reduce((sum, point) => sum + (point.y - yMean) ** 2, 0);
+  if (!(slope < 0)) return null;
+  const slopeStandardError = points.length > 2 ? Math.sqrt(residual / (points.length - 2) / sxx) : Infinity, rt60 = -60 / slope;
+  return { rt60Seconds: rt60, slopeDbPerSecond: slope, rSquared: total > 0 ? 1 - residual / total : 1, standardUncertaintySeconds: Math.abs(60 / slope ** 2 * slopeStandardError), points: points.length };
+};
+function roomAcousticMetrics(impulse, sampleRateHz, options = {}) {
+  if (!Array.isArray(impulse) || impulse.length < 128) throw new Error("Impulse response requires at least 128 samples");
+  const rate = finite2(sampleRateHz, "sampleRateHz");
+  if (rate < 8e3 || rate > 384e3) throw new Error("sampleRateHz outside supported range");
+  const samples = impulse.map(Number), directIndex = options.directIndex ?? samples.reduce((best, value, index) => Math.abs(value) > Math.abs(samples[best]) ? index : best, 0), energy = samples.slice(directIndex).map((value) => value ** 2);
+  const schroeder = new Array(energy.length);
+  let cumulative = 0;
+  for (let i = energy.length - 1; i >= 0; i--) {
+    cumulative += energy[i];
+    schroeder[i] = cumulative;
+  }
+  if (!(schroeder[0] > 0)) throw new Error("Impulse response has no energy");
+  const decayDb = schroeder.map((value) => 10 * Math.log10(Math.max(Number.EPSILON, value / schroeder[0]))), time3 = decayDb.map((_, i) => i / rate), sumRange = (startMs, endMs = Infinity) => energy.reduce((sum, value, i) => {
+    const ms = i / rate * 1e3;
+    return ms >= startMs && ms < endMs ? sum + value : sum;
+  }, 0);
+  const early50 = sumRange(0, 50), early80 = sumRange(0, 80), totalEnergy = sumRange(0), late50 = Math.max(Number.EPSILON, totalEnergy - early50), late80 = Math.max(Number.EPSILON, totalEnergy - early80);
+  const centerTimeMs = energy.reduce((sum, value, i) => sum + i / rate * value, 0) / totalEnergy * 1e3;
+  const result = {
+    claimLevel: "ISO-3382-aligned screening",
+    directIndex,
+    directTimeSeconds: directIndex / rate,
+    edt: decayFit(time3, decayDb, 0, -10),
+    t20: decayFit(time3, decayDb, -5, -25),
+    t30: decayFit(time3, decayDb, -5, -35),
+    clarityC50Db: 10 * Math.log10(early50 / late50),
+    clarityC80Db: 10 * Math.log10(early80 / late80),
+    definitionD50Percent: early50 / totalEnergy * 100,
+    centerTimeMs,
+    decay: decayDb.map((levelDb, i) => ({ timeSeconds: time3[i], levelDb }))
+  };
+  result.acceptedForInterpretation = [result.edt, result.t20, result.t30].filter(Boolean).every((metric) => metric.rSquared >= (options.minimumDecayRSquared ?? 0.9));
+  result.boundary = "ISO conformity requires its prescribed source, room, positions, bands, background-noise correction, instrumentation, and reporting procedure.";
+  return result;
+}
+function spatialRoomSummary(metrics) {
+  if (!Array.isArray(metrics) || metrics.length < 2) throw new Error("At least two positions are required");
+  const fields = ["clarityC50Db", "clarityC80Db", "definitionD50Percent", "centerTimeMs"], summary = {};
+  for (const field of fields) {
+    const values = metrics.map((item) => finite2(item[field], field));
+    summary[field] = { mean: mean3(values), standardDeviation: Math.sqrt(variance(values)), minimum: Math.min(...values), maximum: Math.max(...values) };
+  }
+  return { positions: metrics.length, spatialVariance: summary, claimLevel: "ISO-3382-aligned screening" };
+}
+function speechTransmissionScreening(bands, { redundancyPenalty = 0 } = {}) {
+  if (!Array.isArray(bands) || bands.length < 2) throw new Error("At least two speech bands are required");
+  const weightSum = bands.reduce((sum, band) => sum + finite2(band.importanceWeight, "importanceWeight"), 0);
+  if (!(weightSum > 0)) throw new Error("Speech-band weights must sum above zero");
+  const rows = bands.map((band) => {
+    if (!Array.isArray(band.modulationTransferFactors) || band.modulationTransferFactors.length === 0) throw new Error("Each speech band needs modulation transfer factors");
+    const transmissionIndices = band.modulationTransferFactors.map((value) => {
+      const mtf = Math.max(1e-6, Math.min(1 - 1e-6, finite2(value, "modulationTransferFactor"))), apparentSnrDb = Math.max(-15, Math.min(15, 10 * Math.log10(mtf / (1 - mtf))));
+      return (apparentSnrDb + 15) / 30;
+    });
+    return { centerFrequencyHz: finite2(band.centerFrequencyHz, "centerFrequencyHz"), importanceWeight: band.importanceWeight, meanTransmissionIndex: mean3(transmissionIndices), transmissionIndices };
+  });
+  const screeningIndex = Math.max(0, Math.min(1, rows.reduce((sum, row) => sum + row.meanTransmissionIndex * row.importanceWeight, 0) / weightSum - redundancyPenalty));
+  return { claimLevel: "IEC-60268-16-inspired STI screening", screeningIndex, rows, redundancyPenalty, boundary: "This tool accepts caller-supplied modulation transfer factors and importance weights. It does not implement or certify the complete IEC 60268-16 measurement, auditory masking, level, redundancy, gender, uncertainty, or reporting procedure." };
+}
+
+// lib/system-science.mjs
+var finite3 = (value, name) => {
+  const number3 = Number(value);
+  if (!Number.isFinite(number3)) throw new Error(`${name} must be finite`);
+  return number3;
+};
+var mean4 = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+var db = (value) => 20 * Math.log10(Math.max(Number.EPSILON, value));
+var complex = (value) => ({ re: finite3(value.re, "complex.re"), im: finite3(value.im, "complex.im") });
+var add = (a, b) => ({ re: a.re + b.re, im: a.im + b.im });
+var multiply = (a, b) => ({ re: a.re * b.re - a.im * b.im, im: a.re * b.im + a.im * b.re });
+var conjugate = (a) => ({ re: a.re, im: -a.im });
+var magnitude = (a) => Math.hypot(a.re, a.im);
+function polarCharacterization(angles) {
+  if (!Array.isArray(angles) || angles.length < 3) throw new Error("At least three polar angles are required");
+  const frequencies = angles[0].response.map((point) => finite3(point.frequencyHz, "frequencyHz"));
+  if (angles.some((angle) => angle.response.length !== frequencies.length)) throw new Error("Every angle must use the same frequency grid");
+  const rows = frequencies.map((frequencyHz, index) => {
+    const onAxis = angles.find((angle) => Number(angle.horizontalDeg) === 0 && Number(angle.verticalDeg ?? 0) === 0)?.response[index]?.levelDb;
+    if (angles.some((angle) => finite3(angle.response[index].frequencyHz, "frequencyHz") !== frequencyHz)) throw new Error("Every angle must use the same frequency values");
+    const levels = angles.map((angle) => finite3(angle.response[index].levelDb, "levelDb"));
+    const angularMeanDb = 10 * Math.log10(mean4(levels.map((value) => 10 ** (value / 10))));
+    return { frequencyHz, onAxisDb: onAxis ?? levels[0], angularMeanDb, directivityIndexDb: (onAxis ?? levels[0]) - angularMeanDb, spatialStandardDeviationDb: Math.sqrt(mean4(levels.map((value) => (value - mean4(levels)) ** 2))) };
+  });
+  const horizontal = new Set(angles.map((angle) => Number(angle.horizontalDeg))), vertical = new Set(angles.map((angle) => Number(angle.verticalDeg ?? 0)));
+  return { claimLevel: "CTA-2034-style exploratory characterization", rows, scan: { positions: angles.length, horizontalAngles: horizontal.size, verticalAngles: vertical.size }, completeSpinorama: horizontal.size >= 19 && vertical.size >= 19, boundary: "A CTA-2034-B conformity claim requires its complete normative angular grid, environment, processing, and reporting procedure." };
+}
+function maximumCleanOutput(levelRuns, options = {}) {
+  if (!Array.isArray(levelRuns) || levelRuns.length < 2) throw new Error("At least two ascending level runs are required");
+  const sorted = [...levelRuns].sort((a, b) => a.inputLevelDb - b.inputLevelDb), baseline = sorted[0], limitDb = options.maximumCompressionDb ?? 3, minimumCoherence = options.minimumCoherence ?? 0.8;
+  const rows = sorted.map((run2) => {
+    const expectedOutputDb = baseline.outputLevelDb + (run2.inputLevelDb - baseline.inputLevelDb), compressionDb = expectedOutputDb - run2.outputLevelDb, coherent = run2.coherence === void 0 || run2.coherence >= minimumCoherence, clean2 = compressionDb <= limitDb && coherent && !run2.limiterObserved;
+    return { ...run2, expectedOutputDb, compressionDb, clean: clean2, reasons: [compressionDb > limitDb ? "compression limit exceeded" : null, !coherent ? "coherence limit exceeded" : null, run2.limiterObserved ? "limiter observed" : null].filter(Boolean) };
+  });
+  const accepted = rows.filter((row) => row.clean);
+  return { claimLevel: "AES75-inspired screening", maximumCleanOutputDb: accepted.length ? Math.max(...accepted.map((row) => row.outputLevelDb)) : null, rows, boundary: "AES75 conformity requires the normative excitation, transfer-function procedure, calibrated level chain, stopping conditions, and reporting requirements." };
+}
+function optimizeComplexSources({ trainMatrices, heldOutMatrices = [], targets, regularization = 0.01, maxGainDb = 6, iterations = 500 }) {
+  if (!Array.isArray(trainMatrices) || trainMatrices.length === 0) throw new Error("Training matrices are required");
+  const frequencies = trainMatrices.length, sources = trainMatrices[0][0]?.length;
+  if (!sources) throw new Error("At least one source is required");
+  const weights = [];
+  for (let f = 0; f < frequencies; f++) {
+    const A = trainMatrices[f].map((row) => row.map(complex)), target = (targets[f] || A.map(() => ({ re: 1, im: 0 }))).map(complex);
+    if (A.some((row) => row.length !== sources) || target.length !== A.length) throw new Error("Inconsistent transfer-matrix dimensions");
+    let w = Array.from({ length: sources }, () => ({ re: 0, im: 0 }));
+    const norm2 = A.reduce((sum, row) => sum + row.reduce((inner, value) => inner + magnitude(value) ** 2, 0), 0), step = 0.4 / Math.max(Number.EPSILON, norm2 + regularization), maxGain = 10 ** (maxGainDb / 20);
+    for (let iteration = 0; iteration < iterations; iteration++) {
+      const residual = A.map((row, seat) => add(row.reduce((sum, value, source) => add(sum, multiply(value, w[source])), { re: 0, im: 0 }), { re: -target[seat].re, im: -target[seat].im }));
+      w = w.map((value, source) => {
+        const gradient = A.reduce((sum, row, seat) => add(sum, multiply(conjugate(row[source]), residual[seat])), { re: regularization * value.re, im: regularization * value.im });
+        const next = { re: value.re - step * gradient.re, im: value.im - step * gradient.im }, gain = magnitude(next);
+        return gain > maxGain ? { re: next.re * maxGain / gain, im: next.im * maxGain / gain } : next;
+      });
+    }
+    weights.push(w.map((value) => ({ ...value, magnitudeDb: db(magnitude(value)), phaseDeg: Math.atan2(value.im, value.re) * 180 / Math.PI })));
+  }
+  const evaluate = (matrices) => matrices.map((matrix, f) => {
+    const target = (targets[f] || matrix.map(() => ({ re: 1, im: 0 }))).map(complex), outputs = matrix.map((row) => row.map(complex).reduce((sum, value, source) => add(sum, multiply(value, weights[f][source])), { re: 0, im: 0 }));
+    return Math.sqrt(mean4(outputs.map((output, seat) => magnitude(add(output, { re: -target[seat].re, im: -target[seat].im })) ** 2)));
+  });
+  const trainingError = evaluate(trainMatrices), heldOutError = heldOutMatrices.length ? evaluate(heldOutMatrices) : null;
+  return { claimLevel: "research-grade constrained optimization", weights, regularization, maxGainDb, trainingRmsError: mean4(trainingError), heldOutRmsError: heldOutError ? mean4(heldOutError) : null, accepted: Boolean(heldOutError) && mean4(heldOutError) <= mean4(trainingError) * 1.5, constraints: { iterations, complexFrequencyWeights: true }, boundary: "These independent frequency weights are not directly deployable. FIR realization, causality, latency, headroom, and measured post-application verification are mandatory." };
+}
+function optimizePhysicalSourceControls({ frequenciesHz, trainMatrices, heldOutMatrices = [], targets, constraints, passes = 3 }) {
+  if (!Array.isArray(frequenciesHz) || frequenciesHz.length !== trainMatrices.length || targets.length !== frequenciesHz.length) throw new Error("Frequency, matrix, and target grids must match");
+  const sources = trainMatrices[0]?.[0]?.length;
+  if (!sources || sources > 8 || constraints.length !== sources) throw new Error("One constraint set is required for each of 1-8 sources");
+  const candidates = constraints.map((constraint, source) => {
+    const delays = [], gains = [], delayStepMs = constraint.delayStepMs ?? 0.25, gainStepDb = constraint.gainStepDb ?? 1;
+    for (let value = constraint.minimumDelayMs ?? 0; value <= (constraint.maximumDelayMs ?? 0) + 1e-9; value += delayStepMs) delays.push(value);
+    for (let value = constraint.minimumGainDb ?? -12; value <= (constraint.maximumGainDb ?? 6) + 1e-9; value += gainStepDb) gains.push(value);
+    const polarities = constraint.polarities ?? [1, -1], rows = [];
+    for (const delayMs of delays) for (const gainDb of gains) for (const polarity of polarities) rows.push({ source, delayMs, gainDb, polarity, highPassHz: constraint.highPassHz ?? null, lowPassHz: constraint.lowPassHz ?? null });
+    if (rows.length > 5e3) throw new Error("Source constraint grid exceeds 5,000 candidates");
+    return rows;
+  });
+  const responseWeight = (control, frequencyHz) => {
+    const phase = -2 * Math.PI * frequencyHz * control.delayMs / 1e3, gain = 10 ** (control.gainDb / 20) * control.polarity;
+    const highPass = control.highPassHz ? 1 / Math.sqrt(1 + (control.highPassHz / frequencyHz) ** 4) : 1, lowPass = control.lowPassHz ? 1 / Math.sqrt(1 + (frequencyHz / control.lowPassHz) ** 4) : 1, scale = gain * highPass * lowPass;
+    return { re: scale * Math.cos(phase), im: scale * Math.sin(phase) };
+  };
+  const objective = (matrices, controls2) => mean4(matrices.flatMap((matrix, f) => matrix.map((row, seat) => {
+    const output = row.map(complex).reduce((sum, value, source) => add(sum, multiply(value, responseWeight(controls2[source], frequenciesHz[f]))), { re: 0, im: 0 }), target = complex(targets[f][seat]);
+    return magnitude(add(output, { re: -target.re, im: -target.im })) ** 2;
+  })));
+  let controls = candidates.map((rows) => rows.reduce((best, row) => Math.abs(row.gainDb) + Math.abs(row.delayMs) < Math.abs(best.gainDb) + Math.abs(best.delayMs) && row.polarity === 1 ? row : best, rows[0]));
+  for (let pass = 0; pass < passes; pass++) for (let source = 0; source < sources; source++) {
+    let best = controls[source], bestError = objective(trainMatrices, controls);
+    for (const candidate of candidates[source]) {
+      const proposal = [...controls];
+      proposal[source] = candidate;
+      const error2 = objective(trainMatrices, proposal);
+      if (error2 < bestError) {
+        best = candidate;
+        bestError = error2;
+      }
+    }
+    controls[source] = best;
+  }
+  const trainingRmsError = Math.sqrt(objective(trainMatrices, controls)), heldOutRmsError = heldOutMatrices.length ? Math.sqrt(objective(heldOutMatrices, controls)) : null, maximumGainDb = Math.max(...controls.map((control) => control.gainDb)), totalLinearGain = controls.reduce((sum, control) => sum + 10 ** (control.gainDb / 20), 0);
+  return { claimLevel: "physically constrained research optimization", controls, trainingRmsError, heldOutRmsError, accepted: heldOutRmsError !== null && heldOutRmsError <= trainingRmsError * 1.5, headroom: { maximumSourceGainDb: maximumGainDb, summedGainUpperBoundDb: db(totalLinearGain) }, constraints: { discreteDelay: true, discretePolarity: true, fixedHighPassLowPass: true, passes }, boundary: "Crossover responses are generic fourth-order magnitude constraints, not device filters. Confirm realized phase, causality, headroom, limiter behavior, and every protected held-out seat by measurement before deployment." };
+}
+var fft = (input, inverse = false) => {
+  const n = input.length;
+  if (n < 2 || n & n - 1) throw new Error("FFT length must be a power of two");
+  const output = input.map(complex);
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) [output[i], output[j]] = [output[j], output[i]];
+  }
+  for (let length = 2; length <= n; length <<= 1) {
+    const angle = (inverse ? 2 : -2) * Math.PI / length, root = { re: Math.cos(angle), im: Math.sin(angle) };
+    for (let start = 0; start < n; start += length) {
+      let factor = { re: 1, im: 0 };
+      for (let j = 0; j < length / 2; j++) {
+        const even = output[start + j], odd = multiply(output[start + j + length / 2], factor);
+        output[start + j] = add(even, odd);
+        output[start + j + length / 2] = add(even, { re: -odd.re, im: -odd.im });
+        factor = multiply(factor, root);
+      }
+    }
+  }
+  return inverse ? output.map((value) => ({ re: value.re / n, im: value.im / n })) : output;
+};
+function designRegularizedFir({ measuredResponse, targetResponse, taps = 1024, regularization = 0.01, maxBoostDb = 6, latencySamples = null, quantizationBits = 32 }) {
+  if (taps < 64 || taps > 16384 || taps & taps - 1) throw new Error("taps must be a power of two from 64 to 16,384");
+  if (measuredResponse.length !== taps / 2 + 1 || targetResponse.length !== measuredResponse.length) throw new Error("Responses must contain taps/2+1 complex bins");
+  const maxGain = 10 ** (maxBoostDb / 20), positive = measuredResponse.map((raw, index) => {
+    const h = complex(raw), target = complex(targetResponse[index]), denominator = magnitude(h) ** 2 + regularization;
+    let value = multiply(target, { re: h.re / denominator, im: -h.im / denominator });
+    const gain = magnitude(value);
+    if (gain > maxGain) value = { re: value.re * maxGain / gain, im: value.im * maxGain / gain };
+    return value;
+  });
+  const spectrum = [...positive, ...positive.slice(1, -1).reverse().map(conjugate)], unshifted = fft(spectrum, true).map((value) => value.re), latency = latencySamples ?? Math.floor(taps / 4), shifted = unshifted.map((_, index) => unshifted[(index - latency + taps) % taps]);
+  const windowed = shifted.map((value, index) => value * (0.5 - 0.5 * Math.cos(2 * Math.PI * index / (taps - 1)))), scale = 2 ** (quantizationBits - 1) - 1, quantized = windowed.map((value) => Math.round(Math.max(-1, Math.min(1, value)) * scale) / scale), peakIndex = quantized.reduce((best, value, index) => Math.abs(value) > Math.abs(quantized[best]) ? index : best, 0), totalEnergy = quantized.reduce((sum, value) => sum + value ** 2, 0), preEnergy = quantized.slice(0, peakIndex).reduce((sum, value) => sum + value ** 2, 0);
+  return { claimLevel: "engineering FIR design", taps: quantized, metadata: { tapCount: taps, regularization, maxBoostDb, latencySamples: latency, quantizationBits, peakIndex, peak: Math.max(...quantized.map(Math.abs)), preRingingEnergyRatio: preEnergy / Math.max(Number.EPSILON, totalEnergy), headroomDb: -db(Math.max(...quantized.map(Math.abs))) }, deploymentGate: { accepted: preEnergy / Math.max(Number.EPSILON, totalEnergy) <= 0.25, requiresMeasuredHardwareVerification: true, requiresLimiterInteractionCheck: true, requiresTruePeakVerification: true }, boundary: "Generated coefficients are a proposal; measured hardware response and protected-level verification decide deployment." };
+}
+
+// lib/listening-spatial.mjs
+var mean5 = (values) => values.reduce((sum, value) => sum + value, 0) / values.length;
+var variance2 = (values) => values.length < 2 ? 0 : values.reduce((sum, value) => sum + (value - mean5(values)) ** 2, 0) / (values.length - 1);
+var hashSeed = (text) => [...String(text)].reduce((hash2, character) => Math.imul(hash2 ^ character.charCodeAt(0), 16777619) >>> 0, 2166136261);
+var randomSource = (seed) => {
+  let state = hashSeed(seed);
+  return () => {
+    state += 1831565813;
+    let t = state;
+    t = Math.imul(t ^ t >>> 15, t | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+};
+var shuffle = (values, random) => {
+  const result = [...values];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+};
+var wilson = (successes, total, z = 1.96) => {
+  const p = successes / total, denominator = 1 + z ** 2 / total, center = (p + z ** 2 / (2 * total)) / denominator, margin = z * Math.sqrt(p * (1 - p) / total + z ** 2 / (4 * total ** 2)) / denominator;
+  return [Math.max(0, center - margin), Math.min(1, center + margin)];
+};
+function laboratoryListeningPlan({ method, systems, trials = 12, listeners = 1, seed = "audio-calibration", excerpts = [] }) {
+  if (!["MUSHRA", "BS.1116"].includes(method)) throw new Error("method must be MUSHRA or BS.1116");
+  if (!Array.isArray(systems) || systems.length < 2) throw new Error("At least two systems are required");
+  const random = randomSource(seed), assignments = [];
+  for (let listener = 1; listener <= listeners; listener++) for (let trial = 1; trial <= trials; trial++) assignments.push({ listener, trial, excerpt: excerpts[(trial - 1) % Math.max(1, excerpts.length)] ?? null, presentationOrder: shuffle(systems.map((system) => system.id), random) });
+  const hiddenReference = systems.find((system) => system.role === "hidden-reference"), anchor = systems.find((system) => system.role === "anchor");
+  return { claimLevel: `ITU-R ${method}-inspired research plan`, method, assignments, seed, blinded: true, hiddenReferencePresent: Boolean(hiddenReference), anchorPresent: Boolean(anchor), ready: Boolean(hiddenReference) && (method === "BS.1116" || Boolean(anchor)), requiredControls: ["level matching", "controlled monitoring chain", "listener training and screening", "randomized concealed identity", "repeat trials", "documented exclusions"], boundary: "ITU conformity requires the complete current Recommendation, prescribed conditions, programme material, listener panel, training, and statistical procedure." };
+}
+function laboratoryListeningReport(plan, responses) {
+  if (!plan?.method || !Array.isArray(responses) || responses.length === 0) throw new Error("Plan and responses are required");
+  const systems = [...new Set(responses.map((response) => response.systemId))], bySystem = {};
+  for (const systemId of systems) {
+    const rows = responses.filter((response) => response.systemId === systemId), scores = rows.map((row) => Number(row.score)).filter(Number.isFinite);
+    bySystem[systemId] = { observations: scores.length, mean: mean5(scores), standardDeviation: Math.sqrt(variance2(scores)), confidenceInterval95: scores.length ? [mean5(scores) - 1.96 * Math.sqrt(variance2(scores) / scores.length), mean5(scores) + 1.96 * Math.sqrt(variance2(scores) / scores.length)] : null };
+  }
+  const screening = responses.filter((response) => typeof response.correct === "boolean"), successes = screening.filter((response) => response.correct).length;
+  return { claimLevel: `${plan.claimLevel || "laboratory listening"} analysis`, systems: bySystem, listenerScreening: screening.length ? { trials: screening.length, successes, fraction: successes / screening.length, confidenceInterval95: wilson(successes, screening.length) } : null, repeatability: responses.filter((row) => row.repeatGroup).reduce((groups, row) => {
+    (groups[row.repeatGroup] ||= []).push(row.score);
+    return groups;
+  }, {}), boundary: "Descriptive statistics do not establish perceptual equivalence or preference without adequate power, valid controls, and the prespecified inferential analysis." };
+}
+function spatialLayoutAssessment({ channels, listener = { x: 0, y: 0, z: 0 }, headPositionMetadata = null }) {
+  if (!Array.isArray(channels) || channels.length < 2) throw new Error("At least two channels are required");
+  const labels = /* @__PURE__ */ new Set(), issues = [], normalized = channels.map((channel) => {
+    if (labels.has(channel.label)) issues.push(`duplicate channel label: ${channel.label}`);
+    labels.add(channel.label);
+    if (channel.azimuthDeg < -180 || channel.azimuthDeg > 180) issues.push(`invalid azimuth: ${channel.label}`);
+    if (channel.elevationDeg < -90 || channel.elevationDeg > 90) issues.push(`invalid elevation: ${channel.label}`);
+    const radiusM = channel.radiusM ?? 1, azimuth = channel.azimuthDeg * Math.PI / 180, elevation = channel.elevationDeg * Math.PI / 180;
+    return { ...channel, radiusM, coordinatesM: { x: listener.x + radiusM * Math.cos(elevation) * Math.sin(azimuth), y: listener.y + radiusM * Math.cos(elevation) * Math.cos(azimuth), z: listener.z + radiusM * Math.sin(elevation) } };
+  });
+  return { claimLevel: "BS.2051-metadata screening", valid: issues.length === 0, issues, channels: normalized, headPositionMetadata, boundary: "Layout labels and coordinates are checked for consistency only; BS.2051 compliance requires validation against the normative system definitions and reproduction conditions." };
+}
+function sofaMetadataAssessment(metadata) {
+  const required2 = ["SOFAConventions", "DataType", "RoomType", "SourcePosition", "ReceiverPosition", "DataIR", "SamplingRate"], missing = required2.filter((key) => metadata[key] === void 0), dimensions = {
+    sourcePositions: Array.isArray(metadata.SourcePosition) ? metadata.SourcePosition.length : 0,
+    receiverPositions: Array.isArray(metadata.ReceiverPosition) ? metadata.ReceiverPosition.length : 0,
+    measurements: Array.isArray(metadata.DataIR) ? metadata.DataIR.length : 0
+  };
+  return { claimLevel: "SOFA metadata preflight", valid: missing.length === 0, missing, dimensions, convention: metadata.SOFAConventions ?? null, boundary: "This preflight does not parse HDF5, validate a convention-specific schema, or certify SOFA conformance; use a maintained SOFA API for import/export." };
+}
+function evaluationCorpusManifest({ synthetic = [], external = [], loopbacks = [], crossTool = [] }) {
+  const classify = (item) => ({ id: item.id, sha256: item.sha256 ?? null, license: item.license ?? null, provenance: item.provenance ?? null, independent: Boolean(item.independent), regressionTolerance: item.regressionTolerance ?? null });
+  const sections = { synthetic: synthetic.map(classify), external: external.map(classify), loopbacks: loopbacks.map(classify), crossTool: crossTool.map(classify) }, independentCount = [...sections.external, ...sections.loopbacks, ...sections.crossTool].filter((item) => item.independent && item.sha256 && item.provenance).length;
+  return { schemaVersion: 1, sections, gates: { everyArtifactHasHash: Object.values(sections).flat().every((item) => Boolean(item.sha256)), everyExternalArtifactHasLicense: sections.external.every((item) => Boolean(item.license)), independentReferenceCount: independentCount, interLabReady: independentCount >= 2 }, boundary: "Synthetic fixtures test algorithms but are not independent validation. Inter-laboratory reproducibility needs separately produced, traceable measurements." };
+}
+
+// tool-domains/science-tools.mjs
+var complexSchema = external_exports.object({ re: external_exports.number().finite(), im: external_exports.number().finite() });
+var uncertaintyComponent = external_exports.object({ name: external_exports.string().min(1).max(100), uncertainty: external_exports.number().nonnegative(), distribution: external_exports.enum(["normal", "rectangular", "triangular"]), coverageFactor: external_exports.number().positive().max(10).optional(), sensitivity: external_exports.number().finite().default(1), degreesOfFreedom: external_exports.number().positive().max(1e9).optional() });
+var corpusItem = external_exports.object({ id: external_exports.string().min(1).max(120), sha256: external_exports.string().regex(/^[a-fA-F0-9]{64}$/).optional(), license: external_exports.string().max(120).optional(), provenance: external_exports.string().max(500).optional(), independent: external_exports.boolean().default(false), regressionTolerance: external_exports.number().nonnegative().optional() });
+function registerScienceTools(server2, { ok: ok2, guarded: guarded2 }) {
+  server2.tool("audio_uncertainty_budget", "Propagate calibrated measurement uncertainty using GUM-style linear combination and an explicit standards-claim boundary.", { components: external_exports.array(uncertaintyComponent).min(1).max(100), coverageProbability: external_exports.literal(0.95).default(0.95) }, guarded2(async ({ components, coverageProbability }) => ok2(uncertaintyBudget(components, { coverageProbability }))));
+  server2.tool("audio_uncertainty_monte_carlo", "Propagate normal, rectangular, and triangular input uncertainties with deterministic JCGM-101-style Monte Carlo sampling.", { components: external_exports.array(uncertaintyComponent).min(1).max(100), trials: external_exports.number().int().min(1e3).max(2e5).default(2e4), seed: external_exports.number().int().default(1729), estimate: external_exports.number().finite().default(0) }, guarded2(async ({ components, ...options }) => ok2(monteCarloUncertainty(components, options))));
+  server2.tool("audio_repeatability_bootstrap", "Estimate repeatability and a deterministic bootstrap confidence interval from repeated scalar measurements.", { values: external_exports.array(external_exports.number().finite()).min(2).max(1e3), trials: external_exports.number().int().min(1e3).max(1e5).default(1e4), seed: external_exports.number().int().default(2718) }, guarded2(async ({ values, ...options }) => ok2(bootstrapConfidence(values, options))));
+  server2.tool("audio_transfer_quality", "Evaluate complex transfer-function coherence, phase confidence, harmonic contamination, excitation, timing variance, and clock drift.", { bins: external_exports.array(external_exports.object({ frequencyHz: external_exports.number().positive(), inputPower: external_exports.number().nonnegative(), outputPower: external_exports.number().nonnegative(), crossReal: external_exports.number().finite(), crossImag: external_exports.number().finite(), harmonicPower: external_exports.number().nonnegative().optional(), averages: external_exports.number().int().positive().max(1e5).default(1) })).min(2).max(32768), minimumCoherence: external_exports.number().min(0).max(1).default(0.8), maximumPhaseUncertaintyDeg: external_exports.number().min(0.1).max(180).default(20), maximumHarmonicContaminationDb: external_exports.number().min(-120).max(0).default(-30), minimumInputPower: external_exports.number().positive().default(1e-12), minimumValidFraction: external_exports.number().min(0).max(1).default(0.9), repeatTimingSeconds: external_exports.array(external_exports.number().finite()).max(100).default([]), repeatElapsedSeconds: external_exports.array(external_exports.number().finite()).max(100).default([]), maximumClockDriftPpm: external_exports.number().positive().max(1e5).default(100) }, guarded2(async (args) => ok2(complexTransferQuality(args.bins, args))));
+  server2.tool("audio_room_metrics", "Calculate EDT, T20/T30, C50/C80, D50, center time, decay linearity, and regression uncertainty from an impulse response.", { impulse: external_exports.array(external_exports.number().finite()).min(128).max(2e6), sampleRateHz: external_exports.number().int().min(8e3).max(384e3), directIndex: external_exports.number().int().nonnegative().optional(), minimumDecayRSquared: external_exports.number().min(0).max(1).default(0.9) }, guarded2(async ({ impulse, sampleRateHz, ...options }) => ok2(roomAcousticMetrics(impulse, sampleRateHz, options))));
+  server2.tool("audio_room_spatial_summary", "Summarize position-to-position variance for room-acoustic metrics.", { positions: external_exports.array(external_exports.object({ clarityC50Db: external_exports.number().finite(), clarityC80Db: external_exports.number().finite(), definitionD50Percent: external_exports.number().finite(), centerTimeMs: external_exports.number().finite() })).min(2).max(100) }, guarded2(async ({ positions }) => ok2(spatialRoomSummary(positions))));
+  server2.tool("audio_speech_transmission_screening", "Calculate an IEC-60268-16-inspired speech-transmission screen from caller-supplied modulation transfer factors and importance weights.", { bands: external_exports.array(external_exports.object({ centerFrequencyHz: external_exports.number().positive(), importanceWeight: external_exports.number().nonnegative(), modulationTransferFactors: external_exports.array(external_exports.number().min(0).max(1)).min(1).max(32) })).min(2).max(32), redundancyPenalty: external_exports.number().min(0).max(1).default(0) }, guarded2(async ({ bands, redundancyPenalty }) => ok2(speechTransmissionScreening(bands, { redundancyPenalty }))));
+  server2.tool("audio_polar_characterization", "Analyze guided loudspeaker polar scans and produce exploratory directivity rows with a CTA-2034 claim boundary.", { angles: external_exports.array(external_exports.object({ horizontalDeg: external_exports.number().min(-180).max(180), verticalDeg: external_exports.number().min(-90).max(90).default(0), response: external_exports.array(external_exports.object({ frequencyHz: external_exports.number().positive(), levelDb: external_exports.number().finite() })).min(2).max(4096) })).min(3).max(200) }, guarded2(async ({ angles }) => ok2(polarCharacterization(angles))));
+  server2.tool("audio_maximum_clean_output", "Evaluate a protected level ladder for output compression, coherence loss, and limiting using AES75-inspired gates.", { levelRuns: external_exports.array(external_exports.object({ inputLevelDb: external_exports.number().finite(), outputLevelDb: external_exports.number().finite(), coherence: external_exports.number().min(0).max(1).optional(), limiterObserved: external_exports.boolean().default(false) })).min(2).max(100), maximumCompressionDb: external_exports.number().min(0.1).max(20).default(3), minimumCoherence: external_exports.number().min(0).max(1).default(0.8) }, guarded2(async ({ levelRuns, ...options }) => ok2(maximumCleanOutput(levelRuns, options))));
+  server2.tool("audio_multisource_optimize", "Solve regularized complex multi-source weights across training seats and require held-out-seat evaluation before acceptance.", { trainMatrices: external_exports.array(external_exports.array(external_exports.array(complexSchema).min(1).max(32)).min(1).max(32)).min(1).max(2048), heldOutMatrices: external_exports.array(external_exports.array(external_exports.array(complexSchema).min(1).max(32)).min(1).max(32)).max(2048).default([]), targets: external_exports.array(external_exports.array(complexSchema).min(1).max(32)).min(1).max(2048), regularization: external_exports.number().min(1e-8).max(100).default(0.01), maxGainDb: external_exports.number().min(-30).max(20).default(6), iterations: external_exports.number().int().min(10).max(5e3).default(500) }, guarded2(async (args) => ok2(optimizeComplexSources(args))));
+  server2.tool("audio_multisource_physical_optimize", "Coordinate-search bounded gain, delay, polarity, and fixed crossover controls across training seats with held-out verification.", { frequenciesHz: external_exports.array(external_exports.number().positive()).min(1).max(512), trainMatrices: external_exports.array(external_exports.array(external_exports.array(complexSchema).min(1).max(8)).min(1).max(32)).min(1).max(512), heldOutMatrices: external_exports.array(external_exports.array(external_exports.array(complexSchema).min(1).max(8)).min(1).max(32)).max(512).default([]), targets: external_exports.array(external_exports.array(complexSchema).min(1).max(32)).min(1).max(512), constraints: external_exports.array(external_exports.object({ minimumDelayMs: external_exports.number().min(0).max(100).default(0), maximumDelayMs: external_exports.number().min(0).max(100).default(0), delayStepMs: external_exports.number().positive().max(10).default(0.25), minimumGainDb: external_exports.number().min(-60).max(20).default(-12), maximumGainDb: external_exports.number().min(-60).max(20).default(6), gainStepDb: external_exports.number().positive().max(12).default(1), polarities: external_exports.array(external_exports.union([external_exports.literal(1), external_exports.literal(-1)])).min(1).max(2).default([1, -1]), highPassHz: external_exports.number().positive().optional(), lowPassHz: external_exports.number().positive().optional() })).min(1).max(8), passes: external_exports.number().int().min(1).max(10).default(3) }, guarded2(async (args) => ok2(optimizePhysicalSourceControls(args))));
+  server2.tool("audio_fir_design", "Design a regularized bounded mixed-phase FIR proposal and report causality, pre-ringing, latency, quantization, and deployment gates.", { measuredResponse: external_exports.array(complexSchema).min(33).max(8193), targetResponse: external_exports.array(complexSchema).min(33).max(8193), taps: external_exports.number().int().min(64).max(16384).default(1024), regularization: external_exports.number().min(1e-8).max(100).default(0.01), maxBoostDb: external_exports.number().min(0).max(20).default(6), latencySamples: external_exports.number().int().nonnegative().max(16383).optional(), quantizationBits: external_exports.number().int().min(16).max(53).default(32) }, guarded2(async (args) => ok2(designRegularizedFir(args))));
+  server2.tool("audio_laboratory_listening_plan", "Create blinded randomized MUSHRA- or BS.1116-inspired trials with hidden-reference and anchor readiness gates.", { method: external_exports.enum(["MUSHRA", "BS.1116"]), systems: external_exports.array(external_exports.object({ id: external_exports.string().min(1).max(100), role: external_exports.enum(["candidate", "hidden-reference", "anchor"]).default("candidate") })).min(2).max(20), trials: external_exports.number().int().min(4).max(100).default(12), listeners: external_exports.number().int().min(1).max(100).default(1), seed: external_exports.string().max(200).default("audio-calibration"), excerpts: external_exports.array(external_exports.string().max(200)).max(100).default([]) }, guarded2(async (args) => ok2(laboratoryListeningPlan(args))));
+  server2.tool("audio_laboratory_listening_report", "Produce descriptive confidence and repeatability statistics for completed controlled listening trials.", { plan: external_exports.record(external_exports.any()), responses: external_exports.array(external_exports.object({ systemId: external_exports.string().min(1).max(100), score: external_exports.number().finite(), correct: external_exports.boolean().optional(), repeatGroup: external_exports.string().max(100).optional() })).min(1).max(1e4) }, guarded2(async ({ plan, responses }) => ok2(laboratoryListeningReport(plan, responses))));
+  server2.tool("audio_spatial_layout_assessment", "Preflight immersive channel coordinates and head-position metadata without overstating BS.2051 compliance.", { channels: external_exports.array(external_exports.object({ label: external_exports.string().min(1).max(40), azimuthDeg: external_exports.number().finite(), elevationDeg: external_exports.number().finite(), radiusM: external_exports.number().positive().max(100).optional() })).min(2).max(128), listener: external_exports.object({ x: external_exports.number().finite(), y: external_exports.number().finite(), z: external_exports.number().finite() }).default({ x: 0, y: 0, z: 0 }), headPositionMetadata: external_exports.record(external_exports.any()).optional() }, guarded2(async (args) => ok2(spatialLayoutAssessment(args))));
+  server2.tool("audio_sofa_metadata_assessment", "Preflight HRTF/BRIR SOFA metadata before handing the HDF5 file to a maintained SOFA implementation.", { metadata: external_exports.record(external_exports.any()) }, guarded2(async ({ metadata }) => ok2(sofaMetadataAssessment(metadata))));
+  server2.tool("audio_evaluation_corpus_manifest", "Audit synthetic, external, loopback, and cross-tool reference artifacts for hashes, licenses, independence, provenance, and regression tolerances.", { synthetic: external_exports.array(corpusItem).max(1e3).default([]), external: external_exports.array(corpusItem).max(1e3).default([]), loopbacks: external_exports.array(corpusItem).max(1e3).default([]), crossTool: external_exports.array(corpusItem).max(1e3).default([]) }, guarded2(async (args) => ok2(evaluationCorpusManifest(args))));
+}
+
 // server.mjs
 var execFileAsync3 = promisify3(execFile3);
 var server = new McpServer({ name: "audio-calibration", version: "0.1.0-beta.1" });
@@ -22983,7 +23393,8 @@ var GUIDED_STAGE_TOOLS = Object.freeze({
   report: ["audio_report_plan", "audio_report_execute"]
 });
 registerReleaseTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath, writeAtomicSet, exportFilters, rew });
-server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["laptop", "car", "general"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation"] })));
+registerScienceTools(server, { ok, guarded });
+server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["laptop", "car", "general"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], measurementScience: ["GUM linear and JCGM-101-style Monte Carlo uncertainty", "bootstrap repeatability confidence", "coherence and phase-confidence trace rejection", "clock drift and harmonic contamination", "EDT, T20/T30, C50/C80, D50, center time, spatial variance", "polar/directivity and clean-output characterization", "held-out-seat complex multi-source optimization", "regularized bounded FIR with causality and deployment gates", "MUSHRA and BS.1116-inspired controlled tests", "immersive layout and SOFA metadata preflight", "independent-corpus provenance gates"], claimLevels: ["engineering-quality-screen", "standards-aligned", "conformant only with complete normative procedure and evidence"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation", "no standards conformance claim from home measurements alone"] })));
 server.tool("audio_workspace_scan", "Inventory profiles, sessions, measurements, backups, and reports in the AudioCalibration workspace.", { home: external_exports.string().optional() }, guarded(async ({ home }) => {
   const root = await workspaceRoot(home), groups = {};
   for (const name of ["profiles", "sessions", "measurements", "backups", "reports", "filters", "support"]) {

@@ -24,6 +24,7 @@ Use measured evidence and separate observations from interpretation. Never inven
 Use [rew-safety.md](references/rew-safety.md) for all live measurements. Read [jamesdsp.md](references/jamesdsp.md) before any JamesDSP operation.
 Read [human-listening.md](references/human-listening.md) before interpreting listening relevance, selecting a target, proposing EQ, or reporting preference.
 Read [advanced-analysis.md](references/advanced-analysis.md) for separate repeated traces, state fingerprints, dual-resolution analysis, direct/late windows, linked stereo EQ, speaker protection, measured verification, or controlled listening tests.
+Read [measurement-science.md](references/measurement-science.md) before uncertainty propagation, coherence rejection, room metrics, polar scans, multi-source optimization, FIR design, laboratory listening, immersive/SOFA work, or reference-corpus evaluation.
 Read [artifacts-and-integrations.md](references/artifacts-and-integrations.md) before sharing diagnostics, replaying sessions, or applying a cross-platform DSP adapter.
 
 ## Boundaries

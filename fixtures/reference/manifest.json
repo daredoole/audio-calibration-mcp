@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "synthetic": [
+    {
+      "id": "synthetic-room-decay-v1",
+      "path": "synthetic-decay.json",
+      "sha256": "988da3593bb93467f92e5a73b7136ac6b338e5f17ab9f4a5a0878617f17d8359",
+      "license": "MIT",
+      "provenance": "Generated analytically by this repository",
+      "independent": false,
+      "regressionTolerance": 0.01
+    }
+  ],
+  "external": [],
+  "loopbacks": [],
+  "crossTool": []
+}

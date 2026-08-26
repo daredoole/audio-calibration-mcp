@@ -4,6 +4,9 @@
 
 - Added cross-platform REW installation discovery, explicit executable-path
   fallback, hash-bound confirmed launch, and API startup verification.
+- Added GUM-style linear, Monte Carlo, and bootstrap uncertainty analysis.
+- Added coherence, phase-confidence, clock-drift, excitation, and harmonic-contamination quality gates.
+- Added room, polar/output, held-out multi-source, FIR, controlled-listening, immersive/SOFA, and evaluation-corpus modules with explicit standards claim levels.
 
 ## 0.1.0-beta.1 — 2026-08-26
 

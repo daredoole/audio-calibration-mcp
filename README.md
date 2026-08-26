@@ -86,3 +86,18 @@ must never run in ordinary CI.
 
 See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
 [CHANGELOG.md](CHANGELOG.md). Licensed under the MIT License.
+
+## Measurement-science laboratory modules
+
+Bounded tools cover GUM-style uncertainty budgets and Monte Carlo propagation,
+bootstrap repeatability, complex-transfer coherence and phase confidence,
+ISO-3382-aligned room screening, exploratory polar/directivity scans, clean-output
+ladders, held-out-seat complex multi-source optimization, regularized FIR proposals,
+controlled listening trials, immersive/SOFA metadata preflight, and reference-corpus
+auditing.
+
+`Screening`, `inspired`, and `standards-aligned` never mean certified conformity.
+ISO, IEC, ANSI/CTA, AES, and ITU conformity requires the complete current normative
+document, prescribed setup and processing, calibrated instrumentation, and traceable
+evidence. Optimization and FIR outputs remain proposals until protected, level-matched
+hardware remeasurement accepts them.

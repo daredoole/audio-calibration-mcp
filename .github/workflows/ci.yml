@@ -55,4 +55,5 @@ jobs:
       - run: npm ci
       - run: npm audit --audit-level=high
       - run: npm run coverage
+      - run: npm run corpus:verify
       - run: npm run pack:check

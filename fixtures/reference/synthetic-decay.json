@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "kind": "synthetic-room-decay",
+  "sampleRateHz": 8000,
+  "model": {
+    "amplitude": "exp(-sampleIndex / 1000)",
+    "samples": 8000
+  },
+  "expected": {
+    "minimumDecayRSquared": 0.99,
+    "positiveReverberationTime": true
+  }
+}
