@@ -1,5 +1,9 @@
 # Audio Calibration MCP
 
+<p align="center">
+  <img src="assets/audio-calibration-mcp-logo.png" alt="Audio Calibration MCP echo-moth logo" width="520">
+</p>
+
 Audio Calibration MCP is a local-first, cross-platform Model Context Protocol
 server for Room EQ Wizard (REW). It guides acoustic measurement, speaker and
 room calibration, subwoofer and crossover analysis, conservative EQ, DSP

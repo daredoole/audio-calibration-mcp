@@ -31,6 +31,7 @@
   "files": [
     ".codex-plugin/",
     ".mcp.json",
+    "assets/",
     "dist/",
     "scripts/validate-release.mjs",
     "skills/",
