@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { link, mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { link, mkdtemp, mkdir, realpath, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -42,7 +42,7 @@ test("series parser rejects resource-exhaustion inputs", () => {
 
 test("file hashes, workspace roots, measurement maps, and optional host adapters are inspectable", async () => {
   const root = await mkdtemp(join(tmpdir(), "audio-core-")), file = join(root, "a.bin"); await writeFile(file, "abc");
-  const hashed = await hashFile(file); assert.equal(hashed.bytes, 3); assert.equal(hashed.sha256.length, 64); assert.equal(await workspaceRoot(root), root);
+  const hashed = await hashFile(file); assert.equal(hashed.bytes, 3); assert.equal(hashed.sha256.length, 64); assert.equal(await workspaceRoot(root), await realpath(root));
   assert.deepEqual(measurementEntries([{ id: "a", title: "A" }]).map(x => x[0]), ["a"]); assert.deepEqual(measurementEntries({ b: { title: "B" } }).map(x => x[0]), ["b"]);
   const host = await hostInventory(); assert.equal(host.platform, process.platform === "linux" ? "linux" : process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : process.platform);
   const adapter = await jamesDspAdapter(), status = await jamesDspStatus(); assert.equal(Boolean(adapter), status.available);
