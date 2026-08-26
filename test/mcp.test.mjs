@@ -16,6 +16,7 @@ test("bundled MCP lists the generic audio toolset", async () => {
     assert.ok(names.length >= 85);
     const caps = JSON.parse((await client.callTool({ name: "audio_capabilities", arguments: {} })).content[0].text);
     assert.equal(caps.deviceLimits.laptop.startHz, 120); assert.equal(caps.deviceLimits.laptop.maxBoostDb, 0);
+    assert.deepEqual(caps.workflows, ["general", "car", "laptop"]); assert.deepEqual(caps.targets.at(-1).deviceClasses, ["laptop"]);
     assert.deepEqual(caps.modes, ["guided", "expert"]); assert.equal(caps.targets.length, 3); assert.ok(caps.measurementScience.length >= 10); assert.ok(caps.claimLevels.includes("standards-aligned"));
     const catalog = JSON.parse((await client.callTool({ name: "audio_dataset_catalog", arguments: {} })).content[0].text); assert.equal(catalog.validation.valid, true); assert.equal(catalog.datasets.length, 4); assert.equal(catalog.downloaded, false);
     const datasetPlan = JSON.parse((await client.callTool({ name: "audio_dataset_download_plan", arguments: { datasetId: "sadie-ii-h7-brir-sofa", maximumBytes: 7453844, licenseAccepted: true } })).content[0].text); assert.equal(datasetPlan.kind, "audio-dataset-download"); assert.equal(datasetPlan.dataset.license.spdx, "Apache-2.0");

@@ -8,6 +8,7 @@
 - Added coherence, phase-confidence, clock-drift, excitation, and harmonic-contamination quality gates.
 - Added room, polar/output, held-out multi-source, FIR, controlled-listening, immersive/SOFA, and evaluation-corpus modules with explicit standards claim levels.
 - Added a licensed independent-dataset catalog and confirmed, size-bounded, checksum-verified acquisition with provenance receipts and domain-specific readiness gates.
+- Reordered user-facing workflows, targets, prompts, and documentation so general, room, and car calibration precede the laptop-specific workflow.
 
 ## 0.1.0-beta.1 — 2026-08-26
 

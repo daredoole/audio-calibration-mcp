@@ -8,9 +8,9 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 export const REW_BASE = process.env.AUDIO_REW_URL || "http://127.0.0.1:4735";
 export const DEVICE_LIMITS = Object.freeze({
-  laptop: { startHz: 120, endHz: 20000, levelDbfs: -30, maxSplDb: 75, maxBoostDb: 0 },
+  general: { startHz: 20, endHz: 20000, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 },
   car: { startHz: 20, endHz: 20000, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 },
-  general: { startHz: 20, endHz: 20000, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 }
+  laptop: { startHz: 120, endHz: 20000, levelDbfs: -30, maxSplDb: 75, maxBoostDb: 0 }
 });
 const MAX_SERIES_INPUT_BYTES = 16 * 1024 * 1024;
 const MAX_SERIES_SAMPLES = 2_000_000;

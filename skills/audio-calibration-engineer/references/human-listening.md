@@ -19,7 +19,7 @@ Do not report one overall sound-quality number. Report tonal balance, imaging/ch
 
 Use unsmoothed or minimally smoothed data for timing, polarity, phase, resonances, and distortion. Use perceptual or fractional-octave views for broad tonal interpretation. Preserve the original trace regardless of the displayed smoothing.
 
-Quality-gate coverage, clipping, SNR, repeatability, route stability, DSP stability, expected trace count, and microphone-calibration identity. The session minimum SNR is configurable: 15 dB is the conservative laptop default and 20 dB the room/car default; below 25 dB lowers confidence even when the minimum passes. These are workflow thresholds, not universal audibility laws. Unknown calibrated SPL or SNR lowers confidence but must not be fabricated. A failed gate blocks automatic tuning.
+Quality-gate coverage, clipping, SNR, repeatability, route stability, DSP stability, expected trace count, and microphone-calibration identity. The session minimum SNR is configurable: 20 dB is the room/car default and 15 dB the conservative laptop default; below 25 dB lowers confidence even when the minimum passes. These are workflow thresholds, not universal audibility laws. Unknown calibrated SPL or SNR lowers confidence but must not be fabricated. A failed gate blocks automatic tuning.
 
 ## Targets and EQ
 

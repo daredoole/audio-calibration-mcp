@@ -1,7 +1,7 @@
 # Audio Calibration MCP
 
-Local-first, cross-platform REW measurement and calibration tooling for laptop,
-car, powered-speaker, and general audio systems. It combines guarded measurement,
+Local-first, cross-platform REW measurement and calibration tooling for general,
+powered-speaker, car, and laptop audio systems. It combines guarded measurement,
 raw and perceptual analysis, repeated/held-out EQ validation, DSP export/apply
 adapters, and measured post-change verification.
 
@@ -59,9 +59,6 @@ network endpoint. REW's API still must be enabled in REW itself.
 7. Re-measure at matched level. Predicted response is never acceptance evidence.
 8. Use randomized, level-matched A/B or ABX for preference/discrimination.
 
-Laptop mode starts at 120 Hz and -30 dBFS by default. Stop immediately on an
-unexpected route, silence, clipping, limiter activity, rattling, or distress.
-
 ## Analysis views
 
 Reports preserve the source trace and display native unsmoothed data, derived
@@ -114,3 +111,10 @@ workspace `datasets/` directory.
 Remote entries and checksum-verified downloads are not automatically scientific
 validation. Readiness is calculated per domain and requires parsed, method-compatible
 references from at least two independent institutions with justified tolerances.
+
+## Laptop calibration
+
+Laptop speakers remain fully supported, but this is the least general workflow and
+is intentionally documented last. Laptop mode starts at 120 Hz and -30 dBFS by
+default. Stop immediately on an unexpected route, silence, clipping, limiter
+activity, rattling, or distress.

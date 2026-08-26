@@ -1,6 +1,6 @@
 ---
 name: audio-calibration-engineer
-description: Run guided or expert REW measurement, human-listening assessment, conservative cross-validated EQ, reporting, and optional JamesDSP workflows for laptop, car, powered-speaker, and general audio systems. Do not use for A1 Evo or Denon-specific calibration transfers.
+description: Run guided or expert REW measurement, human-listening assessment, conservative cross-validated EQ, reporting, and optional JamesDSP workflows for general, powered-speaker, car, and laptop audio systems. Do not use for A1 Evo or Denon-specific calibration transfers.
 ---
 
 # Audio Calibration Engineer
@@ -10,7 +10,7 @@ Use measured evidence and separate observations from interpretation. Never inven
 ## Workflow
 
 1. Start with `audio_doctor`. If the REW API is offline, call `rew_install_discover`; when no candidate is found, ask for an absolute executable path and pass it to `rew_launch_plan`. Start REW only through the matching confirmed `rew_launch_execute`, then run `rew_capability_negotiate`. Use `audio_guided_session_plan` for an end-to-end guided workflow; use individual tools in Expert mode. After each accepted guided stage, use `audio_session_advance_plan` and its confirmed executor so the session retains evidence, backups, and an explicit next-tool list. Inventory the host, REW, microphone calibration, output path, profiles, and existing measurements.
-2. Identify the device class. Read [laptop.md](references/laptop.md), [car-audio.md](references/car-audio.md), or [general-speakers.md](references/general-speakers.md) as applicable.
+2. Identify the device class. Read [general-speakers.md](references/general-speakers.md), [car-audio.md](references/car-audio.md), or [laptop.md](references/laptop.md) as applicable.
 3. Preserve the current route, REW configuration, measurement file, and DSP preset before changes.
 4. Build a hash-bound plan. Immediately before audible output, obtain explicit confirmation that the microphone is placed, the area is clear, and the selected output is safe.
 5. Begin at the class-specific conservative level and frequency range. Require clipping and SPL abort guards. Stop on unexpected routing, silence, clipping, overload, or device distress.

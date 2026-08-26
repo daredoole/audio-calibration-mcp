@@ -1,7 +1,7 @@
 {
   "name": "audio-calibration",
-  "version": "0.1.0-beta.1+codex.20260826182447",
-  "description": "Cross-platform guided and expert REW measurement, human-listening assessment, and guarded calibration for computers, cars, and general speaker systems",
+  "version": "0.1.0-beta.1+codex.20260826185420",
+  "description": "Cross-platform guided and expert REW measurement, human-listening assessment, and guarded calibration for general speaker systems, cars, and computers",
   "author": {
     "name": "daredoole",
     "url": "https://github.com/daredoole"
@@ -30,9 +30,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Run a guided human-listening calibration for my laptop speakers.",
       "Analyze my room or car audio response with expert evidence and uncertainty.",
-      "Create and validate a reversible cross-platform EQ preset."
+      "Create and validate a reversible cross-platform EQ preset.",
+      "Run a guided human-listening calibration for my laptop speakers."
     ]
   },
   "mcpServers": "./.mcp.json"

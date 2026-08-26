@@ -20,21 +20,21 @@ export const TARGET_REGISTRY = Object.freeze({
     provenance: ["rew-api", "local-target-policy-v1"],
     caveat: "This is a reversible starting preference, not an audibility standard or proof of correctness."
   }),
-  "perceptual-neutral-nearfield-v1": Object.freeze({
-    id: "perceptual-neutral-nearfield-v1", label: "Perceptual neutral nearfield", deviceClasses: ["laptop"], classification: "preference-starting-point",
-    anchors: [[120, 1.5], [300, 0.7], [1000, 0], [10000, -1], [20000, -2]],
-    provenance: ["rew-api", "local-target-policy-v1"],
-    caveat: "Do not extend correction below measured acoustic capability or protection filtering."
-  }),
   "perceptual-neutral-car-v1": Object.freeze({
     id: "perceptual-neutral-car-v1", label: "Perceptual neutral vehicle cabin", deviceClasses: ["car"], classification: "preference-starting-point",
     anchors: [[20, 6], [80, 5], [300, 1.5], [1000, 0], [10000, -2.5], [20000, -4]],
     provenance: ["rew-api", "local-target-policy-v1"],
     caveat: "Cabin, road-noise, seat, and playback-level effects require measured and listening validation."
+  }),
+  "perceptual-neutral-nearfield-v1": Object.freeze({
+    id: "perceptual-neutral-nearfield-v1", label: "Perceptual neutral nearfield", deviceClasses: ["laptop"], classification: "preference-starting-point",
+    anchors: [[120, 1.5], [300, 0.7], [1000, 0], [10000, -1], [20000, -2]],
+    provenance: ["rew-api", "local-target-policy-v1"],
+    caveat: "Do not extend correction below measured acoustic capability or protection filtering."
   })
 });
 
-const DEFAULT_TARGET = Object.freeze({ laptop: "perceptual-neutral-nearfield-v1", car: "perceptual-neutral-car-v1", general: "perceptual-neutral-room-v1" });
+const DEFAULT_TARGET = Object.freeze({ general: "perceptual-neutral-room-v1", car: "perceptual-neutral-car-v1", laptop: "perceptual-neutral-nearfield-v1" });
 
 export function targetProfile(deviceClass, targetId) {
   const target = TARGET_REGISTRY[targetId || DEFAULT_TARGET[deviceClass]];

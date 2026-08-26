@@ -21435,9 +21435,9 @@ import { promisify } from "node:util";
 var execFileAsync = promisify(execFile);
 var REW_BASE = process.env.AUDIO_REW_URL || "http://127.0.0.1:4735";
 var DEVICE_LIMITS = Object.freeze({
-  laptop: { startHz: 120, endHz: 2e4, levelDbfs: -30, maxSplDb: 75, maxBoostDb: 0 },
+  general: { startHz: 20, endHz: 2e4, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 },
   car: { startHz: 20, endHz: 2e4, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 },
-  general: { startHz: 20, endHz: 2e4, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 }
+  laptop: { startHz: 120, endHz: 2e4, levelDbfs: -30, maxSplDb: 75, maxBoostDb: 0 }
 });
 var MAX_SERIES_INPUT_BYTES = 16 * 1024 * 1024;
 var MAX_SERIES_SAMPLES = 2e6;
@@ -21779,15 +21779,6 @@ var TARGET_REGISTRY = Object.freeze({
     provenance: ["rew-api", "local-target-policy-v1"],
     caveat: "This is a reversible starting preference, not an audibility standard or proof of correctness."
   }),
-  "perceptual-neutral-nearfield-v1": Object.freeze({
-    id: "perceptual-neutral-nearfield-v1",
-    label: "Perceptual neutral nearfield",
-    deviceClasses: ["laptop"],
-    classification: "preference-starting-point",
-    anchors: [[120, 1.5], [300, 0.7], [1e3, 0], [1e4, -1], [2e4, -2]],
-    provenance: ["rew-api", "local-target-policy-v1"],
-    caveat: "Do not extend correction below measured acoustic capability or protection filtering."
-  }),
   "perceptual-neutral-car-v1": Object.freeze({
     id: "perceptual-neutral-car-v1",
     label: "Perceptual neutral vehicle cabin",
@@ -21796,9 +21787,18 @@ var TARGET_REGISTRY = Object.freeze({
     anchors: [[20, 6], [80, 5], [300, 1.5], [1e3, 0], [1e4, -2.5], [2e4, -4]],
     provenance: ["rew-api", "local-target-policy-v1"],
     caveat: "Cabin, road-noise, seat, and playback-level effects require measured and listening validation."
+  }),
+  "perceptual-neutral-nearfield-v1": Object.freeze({
+    id: "perceptual-neutral-nearfield-v1",
+    label: "Perceptual neutral nearfield",
+    deviceClasses: ["laptop"],
+    classification: "preference-starting-point",
+    anchors: [[120, 1.5], [300, 0.7], [1e3, 0], [1e4, -1], [2e4, -2]],
+    provenance: ["rew-api", "local-target-policy-v1"],
+    caveat: "Do not extend correction below measured acoustic capability or protection filtering."
   })
 });
-var DEFAULT_TARGET = Object.freeze({ laptop: "perceptual-neutral-nearfield-v1", car: "perceptual-neutral-car-v1", general: "perceptual-neutral-room-v1" });
+var DEFAULT_TARGET = Object.freeze({ general: "perceptual-neutral-room-v1", car: "perceptual-neutral-car-v1", laptop: "perceptual-neutral-nearfield-v1" });
 function targetProfile(deviceClass, targetId) {
   const target = TARGET_REGISTRY[targetId || DEFAULT_TARGET[deviceClass]];
   if (!target) throw new Error("Unknown target profile");
@@ -22351,7 +22351,7 @@ function createJobStore({ maxJobs = 32, ttlMs = 15 * 6e4, now = () => Date.now()
 
 // lib/calibration-artifact.mjs
 var CALIBRATION_ARTIFACT_VERSION = 1;
-var DEVICE_CLASSES = /* @__PURE__ */ new Set(["laptop", "car", "general"]);
+var DEVICE_CLASSES = /* @__PURE__ */ new Set(["general", "car", "laptop"]);
 var SENSITIVE_KEY = /(user(name)?|home|path|host(name)?|ip(address)?|mac(address)?|serial|device.?id|room.?name|coordinates?|location)/i;
 var RAW_TRACE_KEY = /^(frequencies?|magnitude|phase|impulse|samples?|frequencyResponse|groupDelay|distortion|rt60)$/i;
 var plain = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
@@ -22803,7 +22803,7 @@ function registerAnalysisTools(server2, deps) {
   }));
   server2.tool("rew_human_listening_assessment", "Start a cancellable asynchronous multidimensional listening assessment; poll audio_job_status for the result.", {
     entries: external_exports.array(liveEntrySchema2).min(1).max(32),
-    deviceClass: external_exports.enum(["laptop", "car", "general"]),
+    deviceClass: external_exports.enum(["general", "car", "laptop"]),
     targetId: external_exports.string().optional(),
     lowHz: external_exports.number().min(5).max(1e3).optional(),
     highHz: external_exports.number().min(1e3).max(24e3).optional(),
@@ -22830,7 +22830,7 @@ function registerAnalysisTools(server2, deps) {
   }));
   server2.tool("audio_eq_design_plan", "Create a hash-bound, cut-only EQ proposal trained on stable traces and checked against withheld traces.", {
     entries: external_exports.array(liveEntrySchema2).min(1).max(32),
-    deviceClass: external_exports.enum(["laptop", "car", "general"]),
+    deviceClass: external_exports.enum(["general", "car", "laptop"]),
     targetId: external_exports.string().optional(),
     lowHz: external_exports.number().min(5).max(1e3).optional(),
     highHz: external_exports.number().min(1e3).max(24e3).optional(),
@@ -22854,7 +22854,7 @@ function registerAnalysisTools(server2, deps) {
   server2.tool("audio_linked_stereo_eq_plan", "Create regularized per-channel EQ with linked filter centers and bounded left/right gain differences; each channel must pass held-out validation independently.", {
     leftEntries: external_exports.array(liveEntrySchema2).min(2).max(12),
     rightEntries: external_exports.array(liveEntrySchema2).min(2).max(12),
-    deviceClass: external_exports.enum(["laptop", "car", "general"]),
+    deviceClass: external_exports.enum(["general", "car", "laptop"]),
     targetId: external_exports.string().optional(),
     lowHz: external_exports.number().min(5).max(1e3).optional(),
     highHz: external_exports.number().min(1e3).max(24e3).optional(),
@@ -22895,7 +22895,7 @@ function registerAnalysisTools(server2, deps) {
   server2.tool("audio_post_eq_verification", "Accept or reject an EQ using separately measured before/after traces, matched state fingerprints, level match, quality gates, and repeatability.", {
     beforeEntries: external_exports.array(liveEntrySchema2).min(2).max(16),
     afterEntries: external_exports.array(liveEntrySchema2).min(2).max(16),
-    deviceClass: external_exports.enum(["laptop", "car", "general"]),
+    deviceClass: external_exports.enum(["general", "car", "laptop"]),
     targetId: external_exports.string().optional(),
     lowHz: external_exports.number().min(5).max(1e3).optional(),
     highHz: external_exports.number().min(1e3).max(24e3).optional(),
@@ -23511,7 +23511,7 @@ var GUIDED_STAGE_TOOLS = Object.freeze({
 });
 registerReleaseTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath, writeAtomicSet, exportFilters, rew });
 registerScienceTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath });
-server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["laptop", "car", "general"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts", "curated licensed dataset catalog with confirmed checksum-verified acquisition"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], measurementScience: ["GUM linear and JCGM-101-style Monte Carlo uncertainty", "bootstrap repeatability confidence", "coherence and phase-confidence trace rejection", "clock drift and harmonic contamination", "EDT, T20/T30, C50/C80, D50, center time, spatial variance", "polar/directivity and clean-output characterization", "held-out-seat complex multi-source optimization", "regularized bounded FIR with causality and deployment gates", "MUSHRA and BS.1116-inspired controlled tests", "immersive layout and SOFA metadata preflight", "domain-specific independent-corpus provenance gates"], claimLevels: ["engineering-quality-screen", "standards-aligned", "conformant only with complete normative procedure and evidence"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation", "no standards conformance claim from home measurements alone", "remote catalog entries never count as verified evidence"] })));
+server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["general", "car", "laptop"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts", "curated licensed dataset catalog with confirmed checksum-verified acquisition"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], measurementScience: ["GUM linear and JCGM-101-style Monte Carlo uncertainty", "bootstrap repeatability confidence", "coherence and phase-confidence trace rejection", "clock drift and harmonic contamination", "EDT, T20/T30, C50/C80, D50, center time, spatial variance", "polar/directivity and clean-output characterization", "held-out-seat complex multi-source optimization", "regularized bounded FIR with causality and deployment gates", "MUSHRA and BS.1116-inspired controlled tests", "immersive layout and SOFA metadata preflight", "domain-specific independent-corpus provenance gates"], claimLevels: ["engineering-quality-screen", "standards-aligned", "conformant only with complete normative procedure and evidence"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation", "no standards conformance claim from home measurements alone", "remote catalog entries never count as verified evidence"] })));
 server.tool("audio_workspace_scan", "Inventory profiles, sessions, measurements, backups, and reports in the AudioCalibration workspace.", { home: external_exports.string().optional() }, guarded(async ({ home }) => {
   const root = await workspaceRoot(home), groups = {};
   for (const name of ["profiles", "sessions", "measurements", "backups", "reports", "filters", "support", "datasets"]) {
@@ -23606,8 +23606,8 @@ server.tool("rew_input_level_check", "Capture microphone input levels for a boun
   const telemetryPlausible = rms3.length > 0 && peak.length > 0 && Math.max(...rms3) > -200 && Math.max(...peak) > -200 && Math.max(...peak) >= Math.max(...rms3);
   return ok({ levels, inputSignalPresent: telemetryPlausible, readyForSweep: telemetryPlausible, warning: telemetryPlausible ? null : "Input-level telemetry is digital zero or implausible. Verify the physical microphone, selected source, gain, and permissions before any sweep.", interpretation: "A calibrated SPL reading requires a sensitivity-calibrated microphone and known gain path." });
 }));
-server.tool("rew_measurement_plan", "Create a guarded generic REW sweep plan for laptop, car, or general speakers.", {
-  deviceClass: external_exports.enum(["laptop", "car", "general"]),
+server.tool("rew_measurement_plan", "Create a guarded generic REW sweep plan for general speakers, cars, or laptops.", {
+  deviceClass: external_exports.enum(["general", "car", "laptop"]),
   targetId: external_exports.string().optional(),
   titlePrefix: external_exports.string().min(1).max(80),
   outputChannels: external_exports.array(external_exports.string().min(1).max(100)).min(1).max(32),
@@ -23628,7 +23628,7 @@ server.tool("rew_measurement_plan", "Create a guarded generic REW sweep plan for
   return ok(bindPlan({ kind: "rew-measurement", mode: "standard", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deviceClass: args.deviceClass, targetId: args.targetId || null, home: args.home, audio, audioIdentity: audioStateIdentity(audio), hostState, jamesDspState, stateFingerprint: capturedMeasurementState(audio, hostState, jamesDspState, sweep), settings: sweep, runs: args.outputChannels.map((outputChannel, i) => ({ outputChannel, title: `${args.titlePrefix} ${i + 1}` })), savePath }));
 }));
 server.tool("rew_repeated_session_plan", "Plan 4-6 separately retained left, right, and combined traces with a complete route, volume, DSP, microphone, preset, and sweep fingerprint.", {
-  deviceClass: external_exports.enum(["laptop", "car", "general"]),
+  deviceClass: external_exports.enum(["general", "car", "laptop"]),
   targetId: external_exports.string().optional(),
   titlePrefix: external_exports.string().min(1).max(80),
   channels: external_exports.array(external_exports.object({ outputChannel: external_exports.string().min(1).max(100), role: external_exports.enum(["left", "right", "combined"]) })).min(3).max(3),
@@ -23651,7 +23651,7 @@ server.tool("rew_repeated_session_plan", "Plan 4-6 separately retained left, rig
   return ok(bindPlan({ kind: "rew-measurement", mode: "separate-repeated-evidence", createdAt: (/* @__PURE__ */ new Date()).toISOString(), deviceClass: args.deviceClass, targetId: args.targetId || null, home: args.home, audio, audioIdentity: audioStateIdentity(audio), hostState, jamesDspState, stateFingerprint: capturedMeasurementState(audio, hostState, jamesDspState, sweep), settings: sweep, runs, savePath }));
 }));
 server.tool("rew_level_ladder_plan", "Plan protected separately retained distortion/compression sweeps at several levels for one channel.", {
-  deviceClass: external_exports.enum(["laptop", "car", "general"]),
+  deviceClass: external_exports.enum(["general", "car", "laptop"]),
   targetId: external_exports.string().optional(),
   titlePrefix: external_exports.string().min(1).max(80),
   outputChannel: external_exports.string().min(1).max(100),
@@ -23818,7 +23818,7 @@ server.tool("rew_multiseat_analysis", "Analyze multi-seat consistency, modal can
   const traces = await Promise.all(ids.map((id) => rew(`/measurements/${encodeURIComponent(id)}/frequency-response?ppo=48&smoothing=1%2F12`)));
   return ok(multiseatMetrics(traces, lowHz, highHz, roomVolumeM3, rt60Seconds));
 }));
-server.tool("audio_eq_proposal", "Create conservative cut-first parametric EQ suggestions from a live REW trace; this never applies filters.", { id: external_exports.string(), deviceClass: external_exports.enum(["laptop", "car", "general"]), lowHz: external_exports.number().min(10).max(1e3).optional(), highHz: external_exports.number().min(1e3).max(24e3).optional(), maxCutDb: external_exports.number().min(0).max(12).default(6), maxBoostDb: external_exports.number().min(0).max(6).optional(), bands: external_exports.number().int().min(3).max(20).default(10) }, guarded(async (args) => {
+server.tool("audio_eq_proposal", "Create conservative cut-first parametric EQ suggestions from a live REW trace; this never applies filters.", { id: external_exports.string(), deviceClass: external_exports.enum(["general", "car", "laptop"]), lowHz: external_exports.number().min(10).max(1e3).optional(), highHz: external_exports.number().min(1e3).max(24e3).optional(), maxCutDb: external_exports.number().min(0).max(12).default(6), maxBoostDb: external_exports.number().min(0).max(6).optional(), bands: external_exports.number().int().min(3).max(20).default(10) }, guarded(async (args) => {
   const trace = await rew(`/measurements/${encodeURIComponent(args.id)}/frequency-response?ppo=96&smoothing=1%2F12`), lim = DEVICE_LIMITS[args.deviceClass];
   const filters = eqProposal(trace, { lowHz: args.lowHz ?? lim.startHz, highHz: args.highHz ?? Math.min(lim.endHz, 16e3), maxCutDb: args.maxCutDb, maxBoostDb: Math.min(args.maxBoostDb ?? 0, lim.maxBoostDb), bands: args.bands });
   return ok({ filters, status: "proposal-only", warnings: ["Do not boost narrow nulls.", "Reserve preamp headroom for any positive gain.", "Re-measure after application."] });
@@ -23860,11 +23860,11 @@ server.tool("rew_direct_late_analysis", "Separate direct-window and later reflec
   const trace = await rew(`/measurements/${encodeURIComponent(args.id)}/impulse-response`);
   return ok({ measurementId: args.id, ...directLateWindowAnalysis(trace, args) });
 }));
-server.tool("audio_target_registry", "List versioned, evidence-labelled listening target starting points.", { deviceClass: external_exports.enum(["laptop", "car", "general"]).optional() }, guarded(async ({ deviceClass }) => ok(Object.values(TARGET_REGISTRY).filter((x) => !deviceClass || x.deviceClasses.includes(deviceClass)))));
+server.tool("audio_target_registry", "List versioned, evidence-labelled listening target starting points.", { deviceClass: external_exports.enum(["general", "car", "laptop"]).optional() }, guarded(async ({ deviceClass }) => ok(Object.values(TARGET_REGISTRY).filter((x) => !deviceClass || x.deviceClasses.includes(deviceClass)))));
 server.tool("audio_evidence_registry", "List authoritative sources and exact claim boundaries used by the analysis engine.", {}, guarded(async () => ok({ schemaVersion: 1, sources: EVIDENCE_REGISTRY })));
 server.tool("audio_guided_session_plan", "Create a hash-bound guided or expert calibration workflow without changing audio state.", {
   name: external_exports.string().min(1).max(80),
-  deviceClass: external_exports.enum(["laptop", "car", "general"]),
+  deviceClass: external_exports.enum(["general", "car", "laptop"]),
   mode: external_exports.enum(["guided", "expert"]).default("guided"),
   measurementProfile: external_exports.enum(["quick", "standard", "reference"]).default("standard"),
   targetId: external_exports.string().optional(),
@@ -23987,7 +23987,7 @@ server.tool("audio_report_execute", "Write and verify an exact human-readable an
   if (parsed.schemaVersion !== 2) throw new Error("Report verification failed");
   return ok({ written: p.paths, schemaVersion: parsed.schemaVersion });
 }));
-var profileSchema = external_exports.object({ id: external_exports.string().regex(/^[a-z0-9][a-z0-9_-]{1,63}$/), deviceClass: external_exports.enum(["laptop", "car", "general"]), manufacturer: external_exports.string().max(100).optional(), model: external_exports.string().max(150).optional(), role: external_exports.string().max(80), f3Hz: external_exports.number().positive().optional(), sensitivityDb: external_exports.number().optional(), nominalImpedanceOhm: external_exports.number().positive().optional(), maxSplDb: external_exports.number().positive().optional(), listeningDistanceM: external_exports.number().positive().optional(), coordinatesM: external_exports.object({ x: external_exports.number(), y: external_exports.number(), z: external_exports.number() }).optional(), source: external_exports.string().max(300).optional(), notes: external_exports.string().max(1e3).optional() });
+var profileSchema = external_exports.object({ id: external_exports.string().regex(/^[a-z0-9][a-z0-9_-]{1,63}$/), deviceClass: external_exports.enum(["general", "car", "laptop"]), manufacturer: external_exports.string().max(100).optional(), model: external_exports.string().max(150).optional(), role: external_exports.string().max(80), f3Hz: external_exports.number().positive().optional(), sensitivityDb: external_exports.number().optional(), nominalImpedanceOhm: external_exports.number().positive().optional(), maxSplDb: external_exports.number().positive().optional(), listeningDistanceM: external_exports.number().positive().optional(), coordinatesM: external_exports.object({ x: external_exports.number(), y: external_exports.number(), z: external_exports.number() }).optional(), source: external_exports.string().max(300).optional(), notes: external_exports.string().max(1e3).optional() });
 var speakerProfilePlan = async ({ home, profile }) => {
   const root = await workspaceRoot(home), path = await safeWorkspacePath(root, join5("profiles", `${profile.id}.json`), [".json"]), before = await readFile5(path, "utf8").catch((error2) => error2.code === "ENOENT" ? null : Promise.reject(error2)), content = JSON.stringify({ ...profile, updatedAt: (/* @__PURE__ */ new Date()).toISOString(), uncertainty: profile.source ? "user_or_source_supplied" : "unverified_user_profile" }, null, 2) + "\n";
   return bindPlan({ kind: "speaker-profile-save", createdAt: (/* @__PURE__ */ new Date()).toISOString(), home, profile, path, beforeHash: before === null ? null : stableToken(before), content });
