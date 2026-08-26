@@ -1,7 +1,7 @@
 # Audio Calibration MCP
 
 <p align="center">
-  <img src="assets/audio-calibration-mcp-logo.png" alt="Audio Calibration MCP echo-moth logo" width="520">
+  <img src="assets/audio-calibration-mcp-icon.png" alt="Audio Calibration MCP calibration-bunny logo" width="280">
 </p>
 
 Audio Calibration MCP is a local-first, cross-platform Model Context Protocol

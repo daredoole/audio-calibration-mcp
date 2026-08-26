@@ -1,6 +1,6 @@
 {
   "name": "audio-calibration",
-  "version": "0.1.0-beta.1+codex.20260826195508",
+  "version": "0.1.0-beta.1+codex.20260826200332",
   "description": "Cross-platform Room EQ Wizard measurement, speaker and room calibration, human-listening assessment, and guarded DSP workflows for general systems, cars, and computers",
   "author": {
     "name": "daredoole",
@@ -31,7 +31,7 @@
     "category": "Developer Tools",
     "brandColor": "#FF5A1F",
     "composerIcon": "./assets/audio-calibration-mcp-icon.png",
-    "logo": "./assets/audio-calibration-mcp-logo.png",
+    "logo": "./assets/audio-calibration-mcp-icon.png",
     "capabilities": [
       "Interactive",
       "Read",
