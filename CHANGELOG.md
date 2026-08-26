@@ -13,6 +13,7 @@
 - Added focused GitHub, npm, and Codex discovery metadata using accurate product and workflow names, with regression checks against missing terms and hype claims.
 - Added a simple calibration-bunny identity with listening ears and a frequency-response trace for GitHub, package, and Codex surfaces.
 - Added GitHub's native sponsor button and a restrained Buy Me a Coffee link for optional project support.
+- Exposed the same optional support link in Codex-facing plugin copy and standard npm funding metadata.
 
 ## 0.1.0-beta.1 — 2026-08-26
 

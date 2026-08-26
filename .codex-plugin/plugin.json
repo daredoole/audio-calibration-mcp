@@ -1,6 +1,6 @@
 {
   "name": "audio-calibration",
-  "version": "0.1.0-beta.1+codex.20260826200332",
+  "version": "0.1.0-beta.1+codex.20260826201111",
   "description": "Cross-platform Room EQ Wizard measurement, speaker and room calibration, human-listening assessment, and guarded DSP workflows for general systems, cars, and computers",
   "author": {
     "name": "daredoole",
@@ -25,7 +25,7 @@
   "interface": {
     "displayName": "Audio Calibration",
     "shortDescription": "Human-focused REW calibration with expert controls.",
-    "longDescription": "Runs guided or expert REW sessions, rejects unreliable measurements, analyzes listening-relevant dimensions without a fake global score, designs cut-only EQ against held-out traces, exports cross-platform filters, guides level-matched listening tests, and manages optional JamesDSP presets with backup and rollback.",
+    "longDescription": "Runs guided or expert REW sessions, rejects unreliable measurements, analyzes listening-relevant dimensions without a fake global score, designs cut-only EQ against held-out traces, exports cross-platform filters, guides level-matched listening tests, and manages optional JamesDSP presets with backup and rollback. Free and open source; optional support at https://buymeacoffee.com/daredoole.",
     "developerName": "daredoole",
     "websiteURL": "https://github.com/daredoole/audio-calibration-mcp",
     "category": "Developer Tools",

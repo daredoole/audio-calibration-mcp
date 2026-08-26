@@ -19,6 +19,10 @@
     "jamesdsp"
   ],
   "author": "daredoole",
+  "funding": {
+    "type": "buymeacoffee",
+    "url": "https://buymeacoffee.com/daredoole"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",

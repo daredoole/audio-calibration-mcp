@@ -12,6 +12,8 @@ test("plugin manifest and MCP launch target are coherent", async () => {
   assert.ok(Object.values(pkg.devDependencies).every(version => /^\d+\.\d+\.\d+$/.test(version)));
   assert.ok(pkg.description.includes("Room EQ Wizard"));
   assert.ok(["model-context-protocol", "room-eq-wizard", "audio-calibration"].every(keyword => pkg.keywords.includes(keyword)));
+  assert.equal(pkg.funding.url, "https://buymeacoffee.com/daredoole");
+  assert.ok(plugin.interface.longDescription.includes(pkg.funding.url));
 });
 
 test("README introduces the project with searchable product names and no hype", async () => {

@@ -23,7 +23,9 @@ if (plugin.mcpServers !== "./.mcp.json") throw new Error("Plugin MCP path mismat
 if (mcp.mcpServers?.["audio-calibration"]?.args?.[0] !== "./dist/server.mjs") throw new Error("MCP launch target mismatch");
 if (pkg.bin?.["audio-calibration"] !== "./dist/cli.cjs") throw new Error("CLI launch target must use the bundled artifact");
 if (pkg.dependencies && Object.keys(pkg.dependencies).length) throw new Error("Published package must not install runtime dependencies");
+if (pkg.funding?.url !== "https://buymeacoffee.com/daredoole") throw new Error("Package funding URL is missing or incorrect");
 if (!plugin.version.startsWith(pkg.version)) throw new Error("Plugin and package versions differ");
+if (!plugin.interface?.longDescription?.includes(pkg.funding.url)) throw new Error("Codex plugin description must expose the project funding URL");
 
 const child = spawn(process.execPath, [resolve("dist/server.mjs")], { env: { ...process.env, NODE_ENV: "production" }, stdio: ["pipe", "pipe", "pipe"] });
 let buffer = "", stderr = ""; const pending = new Map();
