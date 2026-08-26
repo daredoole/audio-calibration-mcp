@@ -125,3 +125,8 @@ Laptop speakers remain fully supported, but this is the least general workflow a
 is intentionally documented last. Laptop mode starts at 120 Hz and -30 dBFS by
 default. Stop immediately on an unexpected route, silence, clipping, limiter
 activity, rattling, or distress.
+
+## Support the project
+
+Audio Calibration MCP is free and open source. If it saves you time or improves
+your system, you can [buy daredoole a coffee](https://buymeacoffee.com/daredoole).
