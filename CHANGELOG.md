@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added cross-platform REW installation discovery, explicit executable-path
+  fallback, hash-bound confirmed launch, and API startup verification.
+
 ## 0.1.0-beta.1 — 2026-08-26
 
 - Added guarded REW measurement and multidimensional listening analysis.

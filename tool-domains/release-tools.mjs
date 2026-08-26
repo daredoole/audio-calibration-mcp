@@ -5,6 +5,7 @@ import { createJobStore } from "../lib/jobs.mjs";
 import { createCalibrationArtifact, migrateCalibrationArtifact, sanitizeSupportData, validateCalibrationArtifact } from "../lib/calibration-artifact.mjs";
 import { applyDspTarget, dspAdapterCapabilities, inspectDspTarget } from "../lib/dsp-adapters.mjs";
 import { audioDoctor } from "../lib/diagnostics.mjs";
+import { discoverRewInstall, launchRew } from "../lib/rew-launcher.mjs";
 
 export const analysisJobs = createJobStore();
 
@@ -18,7 +19,26 @@ export function registerReleaseTools(server, deps) {
 
   server.tool("audio_doctor", "Check Node, workspace, REW, host audio, JamesDSP, and configured DSP adapters without changing state.", { home: z.string().optional() }, guarded(async ({ home }) => {
     const root = await workspaceRoot(home);
-    return ok(await audioDoctor({ root, rewProbe: async () => ({ measurements: await rew("/measurements", { timeoutMs: 3000 }), commands: await rew("/measure/commands", { timeoutMs: 3000 }) }) }));
+    return ok(await audioDoctor({ root, rewProbe: async () => ({ measurements: await rew("/measurements", { timeoutMs: 3000 }), commands: await rew("/measure/commands", { timeoutMs: 3000 }) }), rewDiscovery: discoverRewInstall }));
+  }));
+  server.tool("rew_install_discover", "Find a local REW installation across Windows, macOS, and Linux. An explicit absolute executable path can be supplied when automatic discovery fails.", { executablePath: z.string().min(1).max(1000).optional() }, guarded(async ({ executablePath }) => {
+    let api = null; try { api = { online: true, version: await rew("/version", { timeoutMs: 1200 }) }; } catch (error) { api = { online: false, error: String(error.message).slice(0, 240) }; }
+    return ok({ api, ...(await discoverRewInstall({ explicitPath: executablePath })) });
+  }));
+  server.tool("rew_launch_plan", "Create a hash-bound plan to start REW when its local API is offline. Uses automatic discovery or an explicit user-supplied executable path.", { executablePath: z.string().min(1).max(1000).optional(), startupTimeoutSeconds: z.number().int().min(1).max(45).default(20) }, guarded(async ({ executablePath, startupTimeoutSeconds }) => {
+    try {
+      const version = await rew("/version", { timeoutMs: 1200 });
+      return ok(bindPlan({ kind: "rew-launch", createdAt: new Date().toISOString(), alreadyRunning: true, version, timeoutMs: startupTimeoutSeconds * 1000 }));
+    } catch {}
+    const discovery = await discoverRewInstall({ explicitPath: executablePath });
+    if (!discovery.selected) return ok({ planReady: false, ...discovery });
+    return ok(bindPlan({ kind: "rew-launch", createdAt: new Date().toISOString(), alreadyRunning: false, candidate: discovery.selected, timeoutMs: startupTimeoutSeconds * 1000 }));
+  }));
+  server.tool("rew_launch_execute", "Start the exact discovered REW executable after explicit confirmation, then verify that the API becomes ready on port 4735.", { plan: z.record(z.any()), confirmationToken: z.string(), confirm: z.boolean().default(false) }, guarded(async ({ plan, confirmationToken, confirm }) => {
+    const p = verifyPlan(plan, confirmationToken); if (p.kind !== "rew-launch") throw new Error("Wrong plan kind");
+    if (p.alreadyRunning) return ok({ launched: false, alreadyRunning: true, apiReady: true, version: await rew("/version", { timeoutMs: 2000 }) });
+    if (!confirm) throw new Error("Explicit confirmation required to start REW");
+    return ok(await launchRew({ candidate: p.candidate, timeoutMs: p.timeoutMs, probe: () => rew("/version", { timeoutMs: 1200 }) }));
   }));
   server.tool("rew_capability_negotiate", "Detect the live REW API/version and supported read-only command surfaces before a workflow uses them.", {}, guarded(async () => {
     const probes = [

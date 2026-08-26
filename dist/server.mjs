@@ -405,11 +405,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         if (!names[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants4);
+          this.rhs = optimizeExpr(this.rhs, names, constants5);
         return this;
       }
       get names() {
@@ -426,10 +426,10 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants4);
+        this.rhs = optimizeExpr(this.rhs, names, constants5);
         return this;
       }
       get names() {
@@ -490,8 +490,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants4) {
-        this.code = optimizeExpr(this.code, names, constants4);
+      optimizeNames(names, constants5) {
+        this.code = optimizeExpr(this.code, names, constants5);
         return this;
       }
       get names() {
@@ -520,12 +520,12 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         const { nodes } = this;
         let i = nodes.length;
         while (i--) {
           const n = nodes[i];
-          if (n.optimizeNames(names, constants4))
+          if (n.optimizeNames(names, constants5))
             continue;
           subtractNames(names, n.names);
           nodes.splice(i, 1);
@@ -578,12 +578,12 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         var _a;
-        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants4);
-        if (!(super.optimizeNames(names, constants4) || this.else))
+        this.else = (_a = this.else) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants5);
+        if (!(super.optimizeNames(names, constants5) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants4);
+        this.condition = optimizeExpr(this.condition, names, constants5);
         return this;
       }
       get names() {
@@ -606,10 +606,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants4) {
-        if (!super.optimizeNames(names, constants4))
+      optimizeNames(names, constants5) {
+        if (!super.optimizeNames(names, constants5))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants4);
+        this.iteration = optimizeExpr(this.iteration, names, constants5);
         return this;
       }
       get names() {
@@ -645,10 +645,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants4) {
-        if (!super.optimizeNames(names, constants4))
+      optimizeNames(names, constants5) {
+        if (!super.optimizeNames(names, constants5))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants4);
+        this.iterable = optimizeExpr(this.iterable, names, constants5);
         return this;
       }
       get names() {
@@ -690,11 +690,11 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants4) {
+      optimizeNames(names, constants5) {
         var _a, _b;
-        super.optimizeNames(names, constants4);
-        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants4);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants4);
+        super.optimizeNames(names, constants5);
+        (_a = this.catch) === null || _a === void 0 ? void 0 : _a.optimizeNames(names, constants5);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants5);
         return this;
       }
       get names() {
@@ -995,7 +995,7 @@ var require_codegen = __commonJS({
     function addExprNames(names, from) {
       return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
     }
-    function optimizeExpr(expr, names, constants4) {
+    function optimizeExpr(expr, names, constants5) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -1010,14 +1010,14 @@ var require_codegen = __commonJS({
         return items;
       }, []));
       function replaceName(n) {
-        const c = constants4[n.str];
+        const c = constants5[n.str];
         if (c === void 0 || names[n.str] !== 1)
           return n;
         delete names[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants4[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants5[c.str] !== void 0);
       }
     }
     function subtractNames(names, from) {
@@ -1056,10 +1056,10 @@ var require_util = __commonJS({
     var codegen_1 = require_codegen();
     var code_1 = require_code();
     function toHash(arr) {
-      const hash = {};
+      const hash2 = {};
       for (const item of arr)
-        hash[item] = true;
-      return hash;
+        hash2[item] = true;
+      return hash2;
     }
     exports.toHash = toHash;
     function alwaysValidSchema(it, schema) {
@@ -21420,10 +21420,10 @@ var StdioServerTransport = class {
 };
 
 // server.mjs
-import { access as access4, copyFile as copyFile3, mkdir as mkdir4, readFile as readFile4, readdir as readdir2, rename as rename2, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
+import { access as access5, copyFile as copyFile3, mkdir as mkdir4, readFile as readFile4, readdir as readdir2, rename as rename2, unlink as unlink2, writeFile as writeFile2 } from "node:fs/promises";
 import { basename, dirname as dirname4, join as join4, relative as relative2 } from "node:path";
-import { execFile as execFile2 } from "node:child_process";
-import { promisify as promisify2 } from "node:util";
+import { execFile as execFile3 } from "node:child_process";
+import { promisify as promisify3 } from "node:util";
 
 // core.mjs
 import { createHash } from "node:crypto";
@@ -21449,14 +21449,14 @@ async function hashFile(path, maxBytes = 2 * 1024 * 1024 * 1024) {
   const info = await stat(path);
   if (!info.isFile()) throw new Error("Artifact is not a regular file");
   if (info.size > maxBytes) throw new Error("Artifact exceeds the file-size limit");
-  const hash = createHash("sha256");
+  const hash2 = createHash("sha256");
   await new Promise((resolveStream, reject) => {
     const stream = createReadStream(path);
-    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("data", (chunk) => hash2.update(chunk));
     stream.on("end", resolveStream);
     stream.on("error", reject);
   });
-  return { sha256: hash.digest("hex"), bytes: info.size, modifiedMs: info.mtimeMs };
+  return { sha256: hash2.digest("hex"), bytes: info.size, modifiedMs: info.mtimeMs };
 }
 function bindPlan(unsigned) {
   return { ...unsigned, confirmationToken: stableToken(unsigned) };
@@ -22512,7 +22512,7 @@ var check2 = async (id, task, required2 = false) => {
     return { id, status: required2 ? "fail" : "warn", required: required2, detail: String(error2?.message || error2).slice(0, 500) };
   }
 };
-async function audioDoctor({ root, rewProbe }) {
+async function audioDoctor({ root, rewProbe, rewDiscovery = async () => ({ found: false, needsUserPath: true }) }) {
   const checks = await Promise.all([
     check2("node", async () => ({ version: process.version, supported: Number(process.versions.node.split(".")[0]) >= 20 }), true),
     check2("workspace", async () => {
@@ -22520,6 +22520,7 @@ async function audioDoctor({ root, rewProbe }) {
       return { root, readable: true, writable: true };
     }, true),
     check2("rew", rewProbe, true),
+    check2("rew-install", rewDiscovery, false),
     check2("rew-audio", audioSnapshot, false),
     check2("host-audio", hostInventory, false),
     check2("jamesdsp", jamesDspStatus, false),
@@ -22537,6 +22538,120 @@ async function audioDoctor({ root, rewProbe }) {
   };
 }
 
+// lib/rew-launcher.mjs
+import { createHash as createHash2 } from "node:crypto";
+import { spawn as nodeSpawn, execFile as execFile2 } from "node:child_process";
+import { access as access4, realpath as realpath2, stat as stat2 } from "node:fs/promises";
+import { constants as constants4 } from "node:fs";
+import { homedir as homedir2 } from "node:os";
+import { posix, win32 } from "node:path";
+import { promisify as promisify2 } from "node:util";
+var execFileAsync2 = promisify2(execFile2);
+var hash = (value) => createHash2("sha256").update(JSON.stringify(value)).digest("hex");
+var clean = (value) => String(value || "").trim();
+function conventionalCandidates(platform, env, home) {
+  const p = platform === "win32" ? win32 : posix, candidates = [];
+  if (platform === "win32") {
+    for (const base of [env.ProgramFiles, env["ProgramFiles(x86)"], env.LOCALAPPDATA].filter(Boolean)) {
+      candidates.push(p.join(base, "REW", "roomeqwizard.exe"), p.join(base, "Programs", "REW", "roomeqwizard.exe"));
+    }
+  } else if (platform === "darwin") {
+    candidates.push("/Applications/REW.app", p.join(home, "Applications", "REW.app"));
+  } else {
+    candidates.push("/opt/REW/roomeqwizard", "/usr/local/bin/rew", "/usr/local/bin/roomeqwizard", p.join(home, "REW", "roomeqwizard"), p.join(home, ".local", "bin", "rew"));
+  }
+  return [...new Set(candidates)];
+}
+async function pathCommands(platform, env) {
+  const names = platform === "win32" ? ["roomeqwizard.exe", "rew.exe"] : ["roomeqwizard", "rew"];
+  const found = [];
+  for (const name of names) {
+    try {
+      const command = platform === "win32" ? "where.exe" : "which";
+      const { stdout } = await execFileAsync2(command, [name], { timeout: 2e3, windowsHide: true, env });
+      found.push(...String(stdout).split(/\r?\n/).map(clean).filter(Boolean));
+    } catch {
+    }
+  }
+  return found;
+}
+async function inspectCandidate(path, { platform, source }) {
+  const requestedPath = clean(path);
+  if (!requestedPath || requestedPath.length > 1e3 || requestedPath.includes("\0")) return null;
+  try {
+    await access4(requestedPath, constants4.R_OK);
+    const canonicalPath = await realpath2(requestedPath), details = await stat2(canonicalPath);
+    const appBundle = platform === "darwin" && details.isDirectory() && requestedPath.toLowerCase().endsWith(".app");
+    if (!details.isFile() && !appBundle) return null;
+    if (!appBundle && platform !== "win32") await access4(canonicalPath, constants4.X_OK);
+    const identity = { canonicalPath, size: details.size, mtimeMs: details.mtimeMs, mode: details.mode, appBundle };
+    return { path: canonicalPath, requestedPath, source, appBundle, identityHash: hash(identity), identity };
+  } catch {
+    return null;
+  }
+}
+async function discoverRewInstall({ explicitPath, platform = process.platform, env = process.env, home = homedir2(), pathLookup = pathCommands, inspect = inspectCandidate } = {}) {
+  const requested = clean(explicitPath || env.AUDIO_REW_EXECUTABLE), raw = [];
+  if (requested) raw.push([requested, explicitPath ? "user" : "environment"]);
+  for (const value of await pathLookup(platform, env)) raw.push([value, "PATH"]);
+  for (const value of conventionalCandidates(platform, env, home)) raw.push([value, "conventional"]);
+  const candidates = [], seen = /* @__PURE__ */ new Set();
+  for (const [value, source] of raw) {
+    const candidate = await inspect(value, { platform, source });
+    if (candidate && !seen.has(candidate.path)) {
+      seen.add(candidate.path);
+      candidates.push(candidate);
+    }
+  }
+  return {
+    schemaVersion: 1,
+    platform,
+    found: candidates.length > 0,
+    selected: candidates[0] || null,
+    candidates,
+    explicitPathAccepted: Boolean(requested && candidates.some((x) => x.requestedPath === requested)),
+    needsUserPath: candidates.length === 0,
+    userAction: candidates.length ? null : "Provide the absolute REW executable path (or REW.app on macOS) to rew_install_discover or rew_launch_plan. AUDIO_REW_EXECUTABLE is also supported."
+  };
+}
+function rewLaunchCommand(candidate, platform = process.platform) {
+  if (!candidate?.path) throw new Error("A discovered REW candidate is required");
+  return candidate.appBundle && platform === "darwin" ? { command: "/usr/bin/open", args: [candidate.path] } : { command: candidate.path, args: [] };
+}
+async function revalidateRewCandidate(candidate, platform = process.platform) {
+  const current = await inspectCandidate(candidate.path, { platform, source: candidate.source });
+  if (!current || current.identityHash !== candidate.identityHash) throw new Error("REW executable changed after planning");
+  return current;
+}
+var delay = (ms) => new Promise((resolve3) => setTimeout(resolve3, ms));
+async function launchRew({ candidate, platform = process.platform, timeoutMs = 2e4, probe, spawnImpl = nodeSpawn }) {
+  const current = await revalidateRewCandidate(candidate, platform);
+  try {
+    const version2 = await probe();
+    return { launched: false, alreadyRunning: true, apiReady: true, version: version2, executable: current.path };
+  } catch {
+  }
+  const launch = rewLaunchCommand(current, platform), child = spawnImpl(launch.command, launch.args, { detached: true, stdio: "ignore", windowsHide: true, shell: false });
+  let launchError = null;
+  child.once?.("error", (error2) => {
+    launchError = error2;
+  });
+  child.unref?.();
+  const deadline = Date.now() + Math.min(Math.max(timeoutMs, 1e3), 45e3);
+  let lastError = null;
+  while (Date.now() < deadline) {
+    if (launchError) return { launched: false, alreadyRunning: false, apiReady: false, executable: current.path, warning: `REW could not be started: ${String(launchError.message).slice(0, 240)}`, nextAction: "Provide a different absolute executable path to rew_launch_plan." };
+    try {
+      const version2 = await probe();
+      return { launched: true, alreadyRunning: false, apiReady: true, version: version2, executable: current.path, pid: child.pid ?? null };
+    } catch (error2) {
+      lastError = error2;
+      await delay(350);
+    }
+  }
+  return { launched: true, alreadyRunning: false, apiReady: false, executable: current.path, pid: child.pid ?? null, warning: `REW started but its API did not become ready: ${String(lastError?.message || "timeout").slice(0, 240)}`, nextAction: "In REW, enable the API server on port 4735, then run rew_probe or rew_capability_negotiate." };
+}
+
 // tool-domains/release-tools.mjs
 var analysisJobs = createJobStore();
 var filterSchema = external_exports.object({ type: external_exports.literal("PK"), frequencyHz: external_exports.number().positive(), gainDb: external_exports.number().min(-24).max(12), q: external_exports.number().positive().max(30), evidence: external_exports.record(external_exports.any()).optional() });
@@ -22549,7 +22664,33 @@ function registerReleaseTools(server2, deps) {
   }));
   server2.tool("audio_doctor", "Check Node, workspace, REW, host audio, JamesDSP, and configured DSP adapters without changing state.", { home: external_exports.string().optional() }, guarded2(async ({ home }) => {
     const root = await workspaceRoot2(home);
-    return ok2(await audioDoctor({ root, rewProbe: async () => ({ measurements: await rew2("/measurements", { timeoutMs: 3e3 }), commands: await rew2("/measure/commands", { timeoutMs: 3e3 }) }) }));
+    return ok2(await audioDoctor({ root, rewProbe: async () => ({ measurements: await rew2("/measurements", { timeoutMs: 3e3 }), commands: await rew2("/measure/commands", { timeoutMs: 3e3 }) }), rewDiscovery: discoverRewInstall }));
+  }));
+  server2.tool("rew_install_discover", "Find a local REW installation across Windows, macOS, and Linux. An explicit absolute executable path can be supplied when automatic discovery fails.", { executablePath: external_exports.string().min(1).max(1e3).optional() }, guarded2(async ({ executablePath }) => {
+    let api = null;
+    try {
+      api = { online: true, version: await rew2("/version", { timeoutMs: 1200 }) };
+    } catch (error2) {
+      api = { online: false, error: String(error2.message).slice(0, 240) };
+    }
+    return ok2({ api, ...await discoverRewInstall({ explicitPath: executablePath }) });
+  }));
+  server2.tool("rew_launch_plan", "Create a hash-bound plan to start REW when its local API is offline. Uses automatic discovery or an explicit user-supplied executable path.", { executablePath: external_exports.string().min(1).max(1e3).optional(), startupTimeoutSeconds: external_exports.number().int().min(1).max(45).default(20) }, guarded2(async ({ executablePath, startupTimeoutSeconds }) => {
+    try {
+      const version2 = await rew2("/version", { timeoutMs: 1200 });
+      return ok2(bindPlan2({ kind: "rew-launch", createdAt: (/* @__PURE__ */ new Date()).toISOString(), alreadyRunning: true, version: version2, timeoutMs: startupTimeoutSeconds * 1e3 }));
+    } catch {
+    }
+    const discovery = await discoverRewInstall({ explicitPath: executablePath });
+    if (!discovery.selected) return ok2({ planReady: false, ...discovery });
+    return ok2(bindPlan2({ kind: "rew-launch", createdAt: (/* @__PURE__ */ new Date()).toISOString(), alreadyRunning: false, candidate: discovery.selected, timeoutMs: startupTimeoutSeconds * 1e3 }));
+  }));
+  server2.tool("rew_launch_execute", "Start the exact discovered REW executable after explicit confirmation, then verify that the API becomes ready on port 4735.", { plan: external_exports.record(external_exports.any()), confirmationToken: external_exports.string(), confirm: external_exports.boolean().default(false) }, guarded2(async ({ plan, confirmationToken, confirm }) => {
+    const p = verifyPlan2(plan, confirmationToken);
+    if (p.kind !== "rew-launch") throw new Error("Wrong plan kind");
+    if (p.alreadyRunning) return ok2({ launched: false, alreadyRunning: true, apiReady: true, version: await rew2("/version", { timeoutMs: 2e3 }) });
+    if (!confirm) throw new Error("Explicit confirmation required to start REW");
+    return ok2(await launchRew({ candidate: p.candidate, timeoutMs: p.timeoutMs, probe: () => rew2("/version", { timeoutMs: 1200 }) }));
   }));
   server2.tool("rew_capability_negotiate", "Detect the live REW API/version and supported read-only command surfaces before a workflow uses them.", {}, guarded2(async () => {
     const probes = [
@@ -22773,7 +22914,7 @@ function registerAnalysisTools(server2, deps) {
 }
 
 // server.mjs
-var execFileAsync2 = promisify2(execFile2);
+var execFileAsync3 = promisify3(execFile3);
 var server = new McpServer({ name: "audio-calibration", version: "0.1.0-beta.1" });
 var ok = (data, isError = false) => ({ content: [{ type: "text", text: JSON.stringify(data, null, 2) }], isError });
 var guarded = (fn) => async (args) => {
@@ -22784,7 +22925,7 @@ var guarded = (fn) => async (args) => {
   }
 };
 var planSchema = { plan: external_exports.record(external_exports.any()), confirmationToken: external_exports.string(), confirm: external_exports.boolean().default(false) };
-var pathExists = (path) => access4(path).then(() => true, () => false);
+var pathExists = (path) => access5(path).then(() => true, () => false);
 var writeAtomicSet = async (entries, token) => {
   for (const [path] of entries) if (await pathExists(path)) throw new Error(`Refusing to overwrite existing artifact: ${path}`);
   const temporaries = entries.map(([path, content], i) => [`${path}.tmp-${token.slice(0, 12)}-${i}`, path, content]), committed = [];
@@ -22842,7 +22983,7 @@ var GUIDED_STAGE_TOOLS = Object.freeze({
   report: ["audio_report_plan", "audio_report_execute"]
 });
 registerReleaseTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath, writeAtomicSet, exportFilters, rew });
-server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["laptop", "car", "general"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation"] })));
+server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["laptop", "car", "general"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation"] })));
 server.tool("audio_workspace_scan", "Inventory profiles, sessions, measurements, backups, and reports in the AudioCalibration workspace.", { home: external_exports.string().optional() }, guarded(async ({ home }) => {
   const root = await workspaceRoot(home), groups = {};
   for (const name of ["profiles", "sessions", "measurements", "backups", "reports", "filters", "support"]) {
@@ -22868,10 +23009,10 @@ server.tool("audio_route_execute", "Apply an exact host routing plan, verify it,
   const current = await hostInventory(), currentIdentity = { defaultSink: current.defaultSink, defaultSource: current.defaultSource, defaultSinkMuted: current.defaultSinkMuted, defaultSourceMuted: current.defaultSourceMuted };
   if (JSON.stringify(currentIdentity) !== JSON.stringify(p.before)) throw new Error("Host route changed after planning");
   const applyState = async (state) => {
-    if (state.defaultSink) await execFileAsync2("pactl", ["set-default-sink", state.defaultSink], { timeout: 5e3, env: hostAudioEnv() });
-    if (state.defaultSource) await execFileAsync2("pactl", ["set-default-source", state.defaultSource], { timeout: 5e3, env: hostAudioEnv() });
-    if (typeof state.defaultSinkMuted === "boolean" && state.defaultSink) await execFileAsync2("pactl", ["set-sink-mute", state.defaultSink, state.defaultSinkMuted ? "1" : "0"], { timeout: 5e3, env: hostAudioEnv() });
-    if (typeof state.defaultSourceMuted === "boolean" && state.defaultSource) await execFileAsync2("pactl", ["set-source-mute", state.defaultSource, state.defaultSourceMuted ? "1" : "0"], { timeout: 5e3, env: hostAudioEnv() });
+    if (state.defaultSink) await execFileAsync3("pactl", ["set-default-sink", state.defaultSink], { timeout: 5e3, env: hostAudioEnv() });
+    if (state.defaultSource) await execFileAsync3("pactl", ["set-default-source", state.defaultSource], { timeout: 5e3, env: hostAudioEnv() });
+    if (typeof state.defaultSinkMuted === "boolean" && state.defaultSink) await execFileAsync3("pactl", ["set-sink-mute", state.defaultSink, state.defaultSinkMuted ? "1" : "0"], { timeout: 5e3, env: hostAudioEnv() });
+    if (typeof state.defaultSourceMuted === "boolean" && state.defaultSource) await execFileAsync3("pactl", ["set-source-mute", state.defaultSource, state.defaultSourceMuted ? "1" : "0"], { timeout: 5e3, env: hostAudioEnv() });
   };
   try {
     await applyState({ defaultSink: p.requested.sink || p.before.defaultSink, defaultSource: p.requested.source || p.before.defaultSource, defaultSinkMuted: p.requested.sinkMuted ?? p.before.defaultSinkMuted, defaultSourceMuted: p.requested.sourceMuted ?? p.before.defaultSourceMuted });
@@ -23395,7 +23536,7 @@ server.tool("jamesdsp_preset_execute", "Back up JamesDSP, execute an exact prese
   let commandWarning = null;
   try {
     try {
-      await execFileAsync2(adapter.command, [...adapter.prefix, flag, p.presetName], { timeout: 1e4, env: hostAudioEnv() });
+      await execFileAsync3(adapter.command, [...adapter.prefix, flag, p.presetName], { timeout: 1e4, env: hostAudioEnv() });
     } catch (error2) {
       commandWarning = `JamesDSP CLI exited nonzero: ${error2.code ?? "unknown"}`;
     }
@@ -23416,9 +23557,9 @@ server.tool("jamesdsp_preset_execute", "Back up JamesDSP, execute an exact prese
 server.tool("jamesdsp_key_plan", "Create a hash-bound change for one JamesDSP key after verifying that the installed version exposes it.", { key: external_exports.string().regex(/^[a-z][a-z0-9_]{1,79}$/), value: external_exports.string().min(1).max(1e3), home: external_exports.string().optional() }, guarded(async ({ key, value, home }) => {
   const status = await jamesDspStatus(), adapter = await jamesDspAdapter();
   if (!status.available || !adapter) throw new Error(status.reason);
-  const listed = (await execFileAsync2(adapter.command, [...adapter.prefix, "--list-keys"], { timeout: 1e4, env: hostAudioEnv() })).stdout.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  const listed = (await execFileAsync3(adapter.command, [...adapter.prefix, "--list-keys"], { timeout: 1e4, env: hostAudioEnv() })).stdout.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
   if (!listed.includes(key)) throw new Error("Key is not exposed by this JamesDSP version");
-  const before = (await execFileAsync2(adapter.command, [...adapter.prefix, "--get", key], { timeout: 1e4, env: hostAudioEnv() })).stdout.trim();
+  const before = (await execFileAsync3(adapter.command, [...adapter.prefix, "--get", key], { timeout: 1e4, env: hostAudioEnv() })).stdout.trim();
   return ok(bindPlan({ kind: "jamesdsp-key", createdAt: (/* @__PURE__ */ new Date()).toISOString(), key, value, before, home, configPath: status.configPath }));
 }));
 server.tool("jamesdsp_key_execute", "Back up JamesDSP, apply one exact key change, verify it, and automatically restore the active configuration on failure.", planSchema, guarded(async ({ plan, confirmationToken, confirm }) => {
@@ -23431,11 +23572,11 @@ server.tool("jamesdsp_key_execute", "Back up JamesDSP, apply one exact key chang
   let commandWarning = null;
   try {
     try {
-      await execFileAsync2(adapter.command, [...adapter.prefix, "--set", `${p.key}=${p.value}`], { timeout: 1e4, env: hostAudioEnv() });
+      await execFileAsync3(adapter.command, [...adapter.prefix, "--set", `${p.key}=${p.value}`], { timeout: 1e4, env: hostAudioEnv() });
     } catch (error2) {
       commandWarning = `JamesDSP CLI exited nonzero: ${error2.code ?? "unknown"}`;
     }
-    const after = (await execFileAsync2(adapter.command, [...adapter.prefix, "--get", p.key], { timeout: 1e4, env: hostAudioEnv() })).stdout.trim();
+    const after = (await execFileAsync3(adapter.command, [...adapter.prefix, "--get", p.key], { timeout: 1e4, env: hostAudioEnv() })).stdout.trim();
     if (!after.includes(p.value)) throw new Error("JamesDSP key verification failed");
     return ok({ applied: true, key: p.key, before: p.before, after, backup, commandWarning, rollback: { key: p.key, value: p.before, activeConfigurationBackup: backup } });
   } catch (error2) {

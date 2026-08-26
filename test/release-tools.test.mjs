@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { bindPlan, safeWorkspacePath, stableToken, verifyPlan } from "../core.mjs";
@@ -29,4 +29,14 @@ test("release tool domain validates artifacts, support redaction, jobs, negotiat
 test("audio doctor returns readiness dimensions without throwing on optional integrations", async () => {
   const root = await mkdtemp(join(tmpdir(), "audio-doctor-")), result = await audioDoctor({ root, rewProbe: async () => ({ ready: true }) });
   assert.ok(["ready", "ready-with-warnings"].includes(result.status)); assert.ok(result.checks.some(x => x.id === "rew" && x.status === "pass"));
+});
+
+test("REW launch planning accepts a user executable but execution cannot bypass confirmation", async t => {
+  const root = await mkdtemp(join(tmpdir(), "audio-rew-launch-")), executable = join(root, process.platform === "win32" ? "roomeqwizard.exe" : "rew"); await writeFile(executable, "test"); if (process.platform !== "win32") await chmod(executable, 0o700);
+  const previous = process.env.AUDIO_REW_EXECUTABLE; process.env.AUDIO_REW_EXECUTABLE = executable; t.after(() => { if (previous === undefined) delete process.env.AUDIO_REW_EXECUTABLE; else process.env.AUDIO_REW_EXECUTABLE = previous; });
+  const handlers = new Map(), server = { tool: (name, _description, _schema, handler) => handlers.set(name, handler) }, ok = data => data;
+  registerReleaseTools(server, { ok, guarded: fn => fn, bindPlan, verifyPlan, stableToken, workspaceRoot: async () => root, safeWorkspacePath, writeAtomicSet: async () => {}, exportFilters, rew: async () => { throw new Error("offline"); } });
+  const discovered = await handlers.get("rew_install_discover")({}); assert.equal(discovered.found, true); assert.equal(discovered.selected.path, await realpath(executable));
+  const plan = await handlers.get("rew_launch_plan")({ startupTimeoutSeconds: 1 }); assert.equal(plan.kind, "rew-launch"); assert.equal(plan.alreadyRunning, false);
+  await assert.rejects(handlers.get("rew_launch_execute")({ plan, confirmationToken: plan.confirmationToken, confirm: false }), /confirmation required/);
 });

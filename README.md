@@ -16,7 +16,7 @@ and keeps preference separate from engineering calculations.
 |---|---|
 | Node.js | 20 and 22 |
 | Operating systems | Windows x64, macOS Intel/Apple Silicon, Linux x64/ARM64 |
-| REW | Local API on port 4735; capability-detected at runtime |
+| REW | Local API on port 4735; cross-platform install discovery and confirmed startup |
 | JamesDSP | Linux/JDSP4Linux inspect, preview, backup, apply, verify, rollback |
 | Equalizer APO | Export; guarded apply when an explicit config path is configured |
 | CamillaDSP | YAML export; guarded file apply when explicitly configured |
@@ -35,13 +35,20 @@ npm run build
 npm run validate:release
 ```
 
-The checked-in MCP configuration starts `dist/server.mjs`. REW must be running
-with its API enabled. The default URL is `http://127.0.0.1:4735`; override it with
-`AUDIO_REW_URL` only for a trusted local network endpoint.
+The checked-in MCP configuration starts `dist/server.mjs`. Run
+`rew_install_discover` to locate REW through a user override, the
+`AUDIO_REW_EXECUTABLE` environment variable, `PATH`, and conventional Windows,
+macOS, or Linux locations. If discovery fails, pass the absolute executable path
+(or `REW.app` on macOS) to that tool or `rew_launch_plan`. Starting REW requires
+the matching `rew_launch_execute` confirmation. Startup is verified against the
+API on `http://127.0.0.1:4735`; override `AUDIO_REW_URL` only for a trusted local
+network endpoint. REW's API still must be enabled in REW itself.
 
 ## Guided workflow
 
-1. Run `audio_doctor` and `audio_guided_session_plan`.
+1. Run `audio_doctor`. If REW is offline, use `rew_install_discover`, then the
+   confirmed `rew_launch_plan`/`rew_launch_execute` pair. Continue with
+   `rew_capability_negotiate` and `audio_guided_session_plan`.
 2. Inventory the host, REW, microphone calibration, output route, and DSP state.
 3. Create a protected repeated-session plan. Audible execution requires fresh
    microphone-placement, area-clear, and route/safety confirmation.
