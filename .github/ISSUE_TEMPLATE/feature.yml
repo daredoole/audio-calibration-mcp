@@ -1,0 +1,17 @@
+name: Feature request
+description: Propose a measurable, safety-preserving improvement.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: Problem and user workflow }
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes: { label: Engineering evidence and validation method }
+    validations: { required: true }
+  - type: textarea
+    id: safety
+    attributes: { label: Safety, privacy, compatibility, and rollback impact }
+    validations: { required: true }

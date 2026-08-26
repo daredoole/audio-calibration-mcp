@@ -1,0 +1,58 @@
+{
+  "name": "audio-calibration-mcp",
+  "version": "0.1.0-beta.1",
+  "private": true,
+  "type": "module",
+  "description": "Cross-platform MCP server for REW-driven speaker calibration",
+  "author": "daredoole",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/daredoole/audio-calibration-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/daredoole/audio-calibration-mcp/issues"
+  },
+  "homepage": "https://github.com/daredoole/audio-calibration-mcp#readme",
+  "files": [
+    ".codex-plugin/",
+    ".mcp.json",
+    "dist/server.mjs",
+    "scripts/audio-calibration-cli.mjs",
+    "scripts/validate-release.mjs",
+    "skills/",
+    "LICENSE",
+    "README.md",
+    "RELEASE_CHECKLIST.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "bin": {
+    "audio-calibration": "./scripts/audio-calibration-cli.mjs"
+  },
+  "scripts": {
+    "build": "esbuild server.mjs --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.mjs",
+    "start": "node server.mjs",
+    "pretest": "npm run build",
+    "test": "node --test test",
+    "precoverage": "npm run build",
+    "coverage": "c8 --check-coverage --lines 80 --statements 80 --functions 70 --branches 60 --reporter=text-summary --include=core.mjs --include=human-listening.mjs --include=advanced-calibration.mjs --include=lib/*.mjs --include=tool-domains/*.mjs --exclude=server.mjs --exclude=dist/** node --test test",
+    "validate:release": "node scripts/validate-release.mjs",
+    "pack:check": "npm pack --dry-run",
+    "prepack": "npm run build && npm run validate:release",
+    "cli": "node scripts/audio-calibration-cli.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "c8": "^11.0.0",
+    "esbuild": "^0.25.9"
+  }
+}

@@ -1,0 +1,42 @@
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22 }
+      - run: npm ci
+      - run: npm test
+      - run: npm run validate:release
+      - run: npm pack
+      - run: npm sbom --sbom-format cyclonedx > audio-calibration-sbom.json
+      - run: sha256sum audio-calibration-mcp-*.tgz audio-calibration-sbom.json > SHA256SUMS
+      - uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: audio-calibration-mcp-*.tgz
+      - name: Verify packed archive
+        run: |
+          mkdir release-smoke
+          tar -xzf audio-calibration-mcp-*.tgz -C release-smoke
+          cd release-smoke/package
+          node scripts/validate-release.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: audio-calibration-release
+          path: |
+            audio-calibration-mcp-*.tgz
+            audio-calibration-sbom.json
+            SHA256SUMS
+      - name: Create GitHub release with artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" audio-calibration-mcp-*.tgz audio-calibration-sbom.json SHA256SUMS --verify-tag --generate-notes --prerelease

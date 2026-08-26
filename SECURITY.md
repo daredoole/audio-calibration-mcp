@@ -1,0 +1,24 @@
+# Security policy
+
+## Supported versions
+
+Security fixes are provided for the latest beta or stable release. Pre-release
+interfaces may change while preserving calibration-artifact migrations.
+
+## Reporting a vulnerability
+
+Use GitHub private vulnerability reporting for this repository. Do not attach
+real measurement sessions, microphone files, host paths, IP/MAC addresses,
+device serials, or DSP presets. Use `audio_support_bundle_plan` and its confirmed
+executor to create a redacted diagnostic artifact.
+
+## Security model
+
+The MCP is local-first. REW defaults to `http://127.0.0.1:4735`. State-changing
+operations require a hash-bound plan, explicit confirmation, a pre-change
+snapshot or backup, and post-change verification. Files are constrained to the
+AudioCalibration workspace unless an explicitly configured DSP adapter path is
+used. Audible measurements add physical-readiness and clipping/SPL guards.
+
+No telemetry is collected. Generated artifacts can still contain sensitive room,
+route, device, and filesystem metadata; keep them private unless sanitized.

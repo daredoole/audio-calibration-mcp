@@ -1,0 +1,39 @@
+{
+  "name": "audio-calibration",
+  "version": "0.1.0-beta.1+codex.20260826160533",
+  "description": "Cross-platform guided and expert REW measurement, human-listening assessment, and guarded calibration for computers, cars, and general speaker systems",
+  "author": {
+    "name": "daredoole",
+    "url": "https://github.com/daredoole"
+  },
+  "homepage": "https://github.com/daredoole/audio-calibration-mcp",
+  "repository": "https://github.com/daredoole/audio-calibration-mcp",
+  "license": "MIT",
+  "keywords": [
+    "audio",
+    "REW",
+    "calibration",
+    "DSP",
+    "MCP"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Audio Calibration",
+    "shortDescription": "Human-focused REW calibration with expert controls.",
+    "longDescription": "Runs guided or expert REW sessions, rejects unreliable measurements, analyzes listening-relevant dimensions without a fake global score, designs cut-only EQ against held-out traces, exports cross-platform filters, guides level-matched listening tests, and manages optional JamesDSP presets with backup and rollback.",
+    "developerName": "daredoole",
+    "websiteURL": "https://github.com/daredoole/audio-calibration-mcp",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Run a guided human-listening calibration for my laptop speakers.",
+      "Analyze my room or car audio response with expert evidence and uncertainty.",
+      "Create and validate a reversible cross-platform EQ preset."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

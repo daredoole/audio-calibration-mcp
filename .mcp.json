@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "audio-calibration": {
+      "command": "node",
+      "args": ["./dist/server.mjs"],
+      "cwd": ".",
+      "env": { "AUDIO_REW_URL": "http://127.0.0.1:4735" }
+    }
+  }
+}

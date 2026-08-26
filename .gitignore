@@ -1,0 +1,22 @@
+node_modules/
+graphify-out/
+dist/*
+!dist/server.mjs
+coverage/
+*.tgz
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Local calibration evidence is never source material.
+measurements/
+sessions/
+backups/
+profiles/
+reports/
+filters/
+support/
+*.mdat
+*.calibration.json
+*.support.json

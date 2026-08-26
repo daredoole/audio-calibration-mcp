@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audio Calibration Engineer"
+  short_description: "Human-focused REW measurement and calibration"
+  default_prompt: "Use $audio-calibration-engineer to run a guided, evidence-labelled, human-listening calibration for this audio system."

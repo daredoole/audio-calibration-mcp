@@ -1,0 +1,81 @@
+# Audio Calibration MCP
+
+Local-first, cross-platform REW measurement and calibration tooling for laptop,
+car, powered-speaker, and general audio systems. It combines guarded measurement,
+raw and perceptual analysis, repeated/held-out EQ validation, DSP export/apply
+adapters, and measured post-change verification.
+
+This project does not promise universally “perfect” sound. REW can measure an
+acoustic system; it cannot infer listener preference, microphone placement, or a
+speaker's safe output capability without evidence. The MCP reports missing data
+and keeps preference separate from engineering calculations.
+
+## Compatibility
+
+| Component | Support |
+|---|---|
+| Node.js | 20 and 22 |
+| Operating systems | Windows x64, macOS Intel/Apple Silicon, Linux x64/ARM64 |
+| REW | Local API on port 4735; capability-detected at runtime |
+| JamesDSP | Linux/JDSP4Linux inspect, preview, backup, apply, verify, rollback |
+| Equalizer APO | Export; guarded apply when an explicit config path is configured |
+| CamillaDSP | YAML export; guarded file apply when explicitly configured |
+| miniDSP | REW-compatible text export; no hardware mutation in the beta |
+| A1 Evo/Denon | Optional separate bridge; no AVR assumptions in this plugin |
+
+## Install
+
+Download a GitHub release archive and point Codex at its `.mcp.json`. For a source
+checkout:
+
+```text
+npm ci
+npm test
+npm run build
+npm run validate:release
+```
+
+The checked-in MCP configuration starts `dist/server.mjs`. REW must be running
+with its API enabled. The default URL is `http://127.0.0.1:4735`; override it with
+`AUDIO_REW_URL` only for a trusted local network endpoint.
+
+## Guided workflow
+
+1. Run `audio_doctor` and `audio_guided_session_plan`.
+2. Inventory the host, REW, microphone calibration, output route, and DSP state.
+3. Create a protected repeated-session plan. Audible execution requires fresh
+   microphone-placement, area-clear, and route/safety confirmation.
+4. Save separate raw traces, then run quality, dual-resolution, direct/late,
+   crossover, distortion/compression, and human-listening analyses.
+5. Prefer placement, polarity, timing, crossover, and stable cut-first EQ.
+6. Apply only a hash-bound confirmed plan with backup and rollback.
+7. Re-measure at matched level. Predicted response is never acceptance evidence.
+8. Use randomized, level-matched A/B or ABX for preference/discrimination.
+
+Laptop mode starts at 120 Hz and -30 dBFS by default. Stop immediately on an
+unexpected route, silence, clipping, limiter activity, rattling, or distress.
+
+## Analysis views
+
+Reports preserve the source trace and display native unsmoothed data, derived
+engineering resolution, 1/48-octave structure, adaptive modal-to-perceptual
+smoothing, and ERB/perceptual views. Filters are eligible only when features are
+stable across repetitions and held-out data. Narrow/spatial nulls are not boosted.
+
+## Privacy
+
+There is no telemetry. Local sessions may contain usernames, absolute paths,
+device names, room coordinates, microphone hashes, and preset fingerprints.
+Never publish `measurements/`, `sessions/`, `backups/`, `profiles/`, `reports/`,
+or `filters/` directly. Use the redacted support-artifact tools and review the
+result before sharing it.
+
+## Development and validation
+
+`npm test` is hardware-independent. `npm run coverage` exercises deterministic
+DSP and safety fixtures. `npm run validate:release` checks manifests, metadata,
+the bundled server, and package contents. Real-system smoke tests are opt-in and
+must never run in ordinary CI.
+
+See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
+[CHANGELOG.md](CHANGELOG.md). Licensed under the MIT License.
