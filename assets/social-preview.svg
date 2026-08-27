@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
+  <title id="title">Audio Calibration MCP</title>
+  <desc id="desc">A calibration bunny beside measured response traces, with REW, speaker, room, car, and DSP text.</desc>
+  <rect width="1280" height="640" rx="36" fill="#101c2b"/>
+  <path d="M0 470c83-37 120-76 191-54 83 26 125-125 210-60 92 70 123-38 200-17 92 25 124-65 215-25 85 37 126-20 214-8 88 12 147-34 250-4" fill="none" stroke="#2dd4bf" stroke-width="9" opacity=".9"/>
+  <path d="M0 511c104-26 165-8 235-31 90-29 126 33 214-8 72-34 125 21 210-7 79-27 126 23 217-5 92-28 203-10 404-45" fill="none" stroke="#ff6b35" stroke-width="9" opacity=".9"/>
+  <g transform="translate(74 98)">
+    <circle cx="166" cy="166" r="140" fill="#182b40" stroke="#ff6b35" stroke-width="14"/>
+    <path d="M116 126c-34-91 7-122 32-51M216 126c34-91-7-122-32-51" fill="none" stroke="#f5f2e8" stroke-width="24" stroke-linecap="round"/>
+    <path d="M105 174c0-54 28-94 61-94s61 40 61 94-28 94-61 94-61-40-61-94Z" fill="#f5f2e8"/>
+    <circle cx="141" cy="163" r="8" fill="#101c2b"/><circle cx="191" cy="163" r="8" fill="#101c2b"/>
+    <path d="m158 193 8 7 8-7m-8 7v16m0 0-16 8m16-8 16 8" fill="none" stroke="#101c2b" stroke-width="7" stroke-linecap="round"/>
+    <path d="M166 2v40M166 290v40M2 166h40M290 166h40" stroke="#2dd4bf" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <text x="410" y="214" fill="#f5f2e8" font-family="DejaVu Sans, sans-serif" font-size="56" font-weight="700">Audio Calibration MCP</text>
+  <text x="414" y="290" fill="#b8c7d9" font-family="DejaVu Sans, sans-serif" font-size="29">REW measurement · speakers · rooms · cars</text>
+  <text x="414" y="343" fill="#b8c7d9" font-family="DejaVu Sans, sans-serif" font-size="29">conservative EQ · DSP · measured verification</text>
+  <rect x="414" y="386" width="650" height="58" rx="29" fill="#ff6b35"/>
+  <text x="446" y="425" fill="#101c2b" font-family="DejaVu Sans, sans-serif" font-size="23" font-weight="700">evidence first · preference stays human</text>
+</svg>

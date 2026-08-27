@@ -21,6 +21,16 @@ and keeps preference separate from engineering calculations.
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Buy Me a Coffee](https://img.shields.io/badge/support-Buy%20Me%20a%20Coffee-FFDD00)](https://buymeacoffee.com/daredoole)
 
+## Choose the right audio MCP
+
+| Use this project when you need | Use [EvoBurrow MCP](https://github.com/daredoole/evoburrow-mcp) when you need |
+|---|---|
+| General REW acoustic measurement and evidence-based EQ | A1 Evo AcoustiX artifact inspection or terminal workflows |
+| Room, speaker, subwoofer, car, powered-speaker, or laptop calibration | Denon/Marantz AVR status, preset mapping, backup, or guarded LAN control |
+| JamesDSP, CamillaDSP, Equalizer APO, FIR, or listening-test workflows | Audyssey `.ady`/`.oca` review tied to live receiver state |
+
+The projects share measurement discipline, but this MCP deliberately stays hardware-neutral; EvoBurrow owns the A1 and AVR-specific safety boundary.
+
 ## Measured laptop example — before and after
 
 ![REW frequency-response comparison of factory laptop speakers and the JamesDSP-tuned preset](assets/laptop-before-after.svg)
