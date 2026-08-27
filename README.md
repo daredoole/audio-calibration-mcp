@@ -15,6 +15,12 @@ acoustic system; it cannot infer listener preference, microphone placement, or a
 speaker's safe output capability without evidence. The MCP reports missing data
 and keeps preference separate from engineering calculations.
 
+[![CI](https://github.com/daredoole/audio-calibration-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/daredoole/audio-calibration-mcp/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/daredoole/audio-calibration-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/daredoole/audio-calibration-mcp/actions/workflows/codeql.yml)
+[![Release](https://img.shields.io/github/v/release/daredoole/audio-calibration-mcp?include_prereleases&label=release)](https://github.com/daredoole/audio-calibration-mcp/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Buy Me a Coffee](https://img.shields.io/badge/support-Buy%20Me%20a%20Coffee-FFDD00)](https://buymeacoffee.com/daredoole)
+
 ## Measured laptop example — before and after
 
 ![REW frequency-response comparison of factory laptop speakers and the JamesDSP-tuned preset](assets/laptop-before-after.svg)

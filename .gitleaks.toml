@@ -1,0 +1,10 @@
+title = "Audio Calibration MCP gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic documentation and standards examples"
+paths = [
+  '''fixtures/reference/''',
+]
