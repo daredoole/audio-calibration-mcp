@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createCalibrationArtifact, migrateCalibrationArtifact, sanitizeSupportData, validateCalibrationArtifact } from "../lib/calibration-artifact.mjs";
 
-const sweep = { id: "L-1", fingerprints: { control: "control-1234", preset: "preset-1234", microphone: "microphone-1234" }, traceHash: "trace-1234" };
+const hash = char => char.repeat(64);
+const sweep = { id: "L-1", fingerprints: { control: hash("a"), preset: hash("b"), microphone: hash("c"), sweep: hash("d") }, traceHash: hash("e"), measurementFileHash: hash("f"), measurementFile: "measurements/session.mdat" };
 
 test("versioned calibration artifacts validate and preserve reproducibility identity", () => {
   const artifact = createCalibrationArtifact({ session: { id: "s1", deviceClass: "laptop", algorithmVersion: "0.1.0", targetId: "nearfield" }, sweeps: [sweep], provenance: { softwareVersion: "0.1.0" } });

@@ -6,7 +6,17 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
-export const REW_BASE = process.env.AUDIO_REW_URL || "http://127.0.0.1:4735";
+function validatedRewBase(value) {
+  const url = new URL(value);
+  if (url.protocol !== "http:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new Error("AUDIO_REW_URL must be a plain HTTP origin without credentials or path");
+  const host = url.hostname.toLowerCase();
+  if (["127.0.0.1", "localhost", "::1", "[::1]"].includes(host)) return url.origin;
+  if (process.env.AUDIO_REW_ALLOW_REMOTE !== "true") throw new Error("Remote REW requires AUDIO_REW_ALLOW_REMOTE=true");
+  const parts = host.split(".").map(Number), privateIpv4 = parts.length === 4 && parts.every(x => Number.isInteger(x) && x >= 0 && x <= 255) && (parts[0] === 10 || parts[0] === 192 && parts[1] === 168 || parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31 || parts[0] === 169 && parts[1] === 254);
+  if (!privateIpv4 && !host.endsWith(".local")) throw new Error("Remote REW must use a private IPv4 address or .local hostname");
+  return url.origin;
+}
+export const REW_BASE = validatedRewBase(process.env.AUDIO_REW_URL || "http://127.0.0.1:4735");
 export const DEVICE_LIMITS = Object.freeze({
   general: { startHz: 20, endHz: 20000, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 },
   car: { startHz: 20, endHz: 20000, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 },

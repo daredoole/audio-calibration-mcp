@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { resolve } from "node:path";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { bindPlan } from "../core.mjs";
+import { createHash } from "node:crypto";
+import { bindPlan, stableToken } from "../core.mjs";
 
 test("bundled MCP lists the generic audio toolset", async () => {
   const workspace = await mkdtemp(resolve(tmpdir(), "audio-cal-mcp-"));
@@ -33,7 +34,8 @@ test("bundled MCP lists the generic audio toolset", async () => {
     const qualityArtifact = bindPlan({ kind: "measurement-quality-evidence", createdAt: new Date().toISOString(), inputIds: ["1", "2"], accepted: true, metrics: { snrDb: 20 }, reasons: [], fingerprintEvidence: {} });
     const boundQualityAdvance = JSON.parse((await client.callTool({ name: "audio_session_advance_plan", arguments: { sessionFile: opened.sessionFile, completedStage: "quality-gate", evidence: { accepted: true, summary: "measured pass", artifactRefs: [], artifact: qualityArtifact } } })).content[0].text);
     assert.equal(boundQualityAdvance.kind, "guided-session-advance");
-    const validArtifact = { schemaVersion: 1, kind: "audio-calibration-session", createdAt: new Date().toISOString(), session: { id: "test", deviceClass: "laptop", algorithmVersion: "test", targetId: "nearfield" }, sweeps: [{ id: "1", fingerprints: { control: "control-1", preset: "preset-1", microphone: "microphone-1" }, traceHash: "trace-1" }], provenance: { softwareVersion: "test" } };
+    await mkdir(resolve(workspace,"measurements"),{recursive:true}); const replayBytes="mcp replay measurement"; await writeFile(resolve(workspace,"measurements/replay.mdat"),replayBytes);
+    const validArtifact = { schemaVersion: 1, kind: "audio-calibration-session", createdAt: new Date().toISOString(), session: { id: "test", deviceClass: "laptop", algorithmVersion: "test", targetId: "nearfield" }, sweeps: [{ id: "1", fingerprints: { control: stableToken("control-1"), preset: stableToken("preset-1"), microphone: stableToken("microphone-1"), sweep: stableToken("sweep-1") }, traceHash: stableToken("trace-1"), measurementFileHash:createHash("sha256").update(replayBytes).digest("hex"),measurementFile:"measurements/replay.mdat" }], provenance: { softwareVersion: "test" } };
     const artifactResult = JSON.parse((await client.callTool({ name: "audio_artifact_validate", arguments: { artifact: validArtifact } })).content[0].text); assert.equal(artifactResult.valid, true);
     const replay = JSON.parse((await client.callTool({ name: "audio_session_replay_validate", arguments: { artifact: validArtifact } })).content[0].text); assert.equal(replay.replayable, true);
     const supportPlan = JSON.parse((await client.callTool({ name: "audio_support_bundle_plan", arguments: { sourceFile: opened.sessionFile, outputName: "test.support.json" } })).content[0].text);

@@ -1,0 +1,21 @@
+{
+  "manifest_version": "0.2",
+  "name": "audio-calibration-mcp",
+  "version": "0.2.0-beta.1",
+  "description": "Evidence-bound REW measurement, analysis, conservative EQ, DSP, and listening-test tools.",
+  "author": {
+    "name": "daredoole",
+    "url": "https://github.com/daredoole"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.mjs"],
+      "env": {}
+    }
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/daredoole/audio-calibration-mcp"
+}

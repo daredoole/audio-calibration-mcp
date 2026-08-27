@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-beta.1 - 2026-08-27
+
+- Bound protected measurement and quality evidence to actual trace and `.mdat` bytes using server-issued, expiring HMAC evidence tokens.
+- Isolated expensive analysis in bounded, cancellable worker threads and added lifecycle-safe JamesDSP measurement identity checks.
+- Added adversarial evidence, artifact, worker, network, and opt-in REW hardware-loop tests plus MCPB and official MCP Registry release metadata.
+- This remains a prerelease until the opt-in hardware-in-loop matrix passes with calibrated loopback and representative REW hosts.
 
 - Made post-EQ verification asynchronous and cancellable, bounded concurrent
   REW API traffic, propagated abort signals into active requests, and added a
