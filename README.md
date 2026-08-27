@@ -15,6 +15,17 @@ acoustic system; it cannot infer listener preference, microphone placement, or a
 speaker's safe output capability without evidence. The MCP reports missing data
 and keeps preference separate from engineering calculations.
 
+## Measured laptop example — before and after
+
+![REW frequency-response comparison of factory laptop speakers and the JamesDSP-tuned preset](assets/laptop-before-after.svg)
+
+This is measured evidence from four repeated REW sweeps per state, averaged with
+1/12-octave smoothing. Factory is amber and the cut-only JamesDSP preset is cyan.
+The shaded area below 500 Hz marks the protection-limited bass region where no
+boost was applied. The plot preserves measured SPL; preference was assessed in a
+separate level-matched listening comparison. Device, microphone, and preset
+identifiers are intentionally removed from the public artifact.
+
 ## Compatibility
 
 | Component | Support |
