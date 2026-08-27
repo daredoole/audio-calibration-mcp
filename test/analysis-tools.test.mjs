@@ -14,10 +14,10 @@ test("analysis tool domain is dependency-injected and covers quality, async, EQ,
     ok, guarded: fn => fn, liveEntrySchema: {}, fetchTraceBundle: async value => ({ ...value, ...trace }),
     rew: async path => ({ smoothing: path.includes("smoothing=None") ? "None" : "1/48", freqStep: 1, frequencies: [100, 1000], magnitude: [70, 70] }),
     measurementQuality: (traces, args) => ({ accepted: true, count: traces.length, stateVerified: args.stateVerified }),
-    humanListeningAssessment: traces => ({ dimensions: { tonalBalance: { score: 80 } }, traceCount: traces.length }), bindPlan,
+    humanListeningAssessment: traces => ({ quality: { accepted: true, metrics: { repeatabilitySdDb: 0.2 } }, dimensions: { tonalBalance: { score: 80, raw: { bassRmseDb: 2, midRmseDb: 2, trebleRmseDb: 2 } } }, traceCount: traces.length }), bindPlan,
     multiResolutionEqProposal: () => ({ accepted: true, filters: [] }), linkedStereoEqProposal: () => ({ accepted: true, leftFilters: [], rightFilters: [] }),
     speakerProtectionAssessment: args => ({ accepted: true, args }), compressionMetrics: traces => ({ traceCount: traces.length, maximumCompressionDb: 0 }),
-    measuredPostEqVerification: () => ({ accepted: true })
+    measuredBroadbandLevelDifference: () => ({ differenceDb: 0, bandHz: [500, 8000] }), measuredPostEqVerification: () => ({ accepted: true })
   });
   assert.equal(handlers.size, 7);
   const quality = await handlers.get("rew_measurement_quality")({ entries: [entry], routeStable: true, dspStable: true }); assert.equal(quality.accepted, true);
@@ -27,5 +27,6 @@ test("analysis tool domain is dependency-injected and covers quality, async, EQ,
   const stereo = await handlers.get("audio_linked_stereo_eq_plan")({ leftEntries: [entry, { ...entry, id: "2" }], rightEntries: [{ ...entry, id: "3", role: "right" }, { ...entry, id: "4", role: "right" }], deviceClass: "laptop" }); assert.equal(stereo.kind, "linked-stereo-eq-design");
   assert.equal((await handlers.get("audio_speaker_protection_assessment")({ maximumBoostDb: 0 })).accepted, true);
   assert.equal((await handlers.get("rew_compression_analysis")({ entries: [entry, { ...entry, id: "2" }], levelsDbfs: [-40, -30] })).traceCount, 2);
-  const verified = await handlers.get("audio_post_eq_verification")({ beforeEntries: [entry, { ...entry, id: "2" }], afterEntries: [{ ...entry, id: "3" }, { ...entry, id: "4" }], deviceClass: "laptop", beforeControlFingerprint: "controls", afterControlFingerprint: "controls", beforePresetFingerprint: "before-preset", afterPresetFingerprint: "after-preset", levelMatchedWithinDb: 0.1 }); assert.equal(verified.accepted, true);
+  const verificationStart = await handlers.get("audio_post_eq_verification")({ beforeEntries: [entry, { ...entry, id: "2" }], afterEntries: [{ ...entry, id: "3" }, { ...entry, id: "4" }], deviceClass: "laptop", beforeControlFingerprint: "controls", afterControlFingerprint: "controls", beforePresetFingerprint: "before-preset", afterPresetFingerprint: "after-preset", levelMatchToleranceDb: 0.2 });
+  let verified; for (let i = 0; i < 50; i++) { verified = analysisJobs.status(verificationStart.id); if (verified.status === "complete") break; await delay(2); } assert.equal(verified.result.accepted, true);
 });

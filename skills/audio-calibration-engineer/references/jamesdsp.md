@@ -12,6 +12,19 @@ Before any preset or key mutation:
 4. Apply through the CLI, verify the resulting status and values, and retain the rollback path.
 5. Re-measure at matched level. A successful CLI response is not acoustic verification.
 
+For controlled preference comparisons, use `jamesdsp_ab_plan`. It requires two
+saved presets, a measured uncompensated level difference, recorded excerpts, and
+an exact active preset that can be restored. Present each randomized sample with
+`jamesdsp_ab_present_execute`; finish with `jamesdsp_ab_restore_execute`.
+Presentation applies both the preset and its compensated host volume, verifies
+runtime/config synchronization, and rolls back the prior preset and volume on
+failure. Do not reveal the plan's A/B assignment to the listener.
+
+`jamesdsp_key_execute` treats host output volume as transaction state. If a key
+change causes an unexpected volume jump, the tool restores the captured volume
+and reports the side effect. Key verification is exact; substring matches are not
+accepted.
+
 Do not write unknown keys, fabricate a config schema, enable enhancement effects as calibration, or apply an REW proposal without adequate preamp headroom.
 
 ## Measurement-state identity

@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Made post-EQ verification asynchronous and cancellable, bounded concurrent
+  REW API traffic, propagated abort signals into active requests, and added a
+  short-lived trace-bundle cache.
+- Changed post-EQ acceptance to calculate level difference from the measured
+  before/after traces instead of trusting a caller-supplied match claim.
+- Made SNR evidence mandatory by default for measurement-quality acceptance and
+  bound guided quality-stage advancement to the quality tool's evidence artifact.
+- Added transactional, randomized, level-compensated JamesDSP A/B presentation
+  with exact preset/runtime verification and host-volume restoration.
+- Hardened JamesDSP key apply/rollback with exact value equality, runtime-sync
+  checks, and detection/restoration of host-volume side effects.
+- Added repeated-trace before/after report groups with 1/12-octave averaging,
+  ±1 SD bands, standalone SVG output, and README-ready Markdown.
 - Added cross-platform REW installation discovery, explicit executable-path
   fallback, hash-bound confirmed launch, and API startup verification.
 - Added GUM-style linear, Monte Carlo, and bootstrap uncertainty analysis.

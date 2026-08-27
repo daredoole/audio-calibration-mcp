@@ -15,6 +15,40 @@ export const DEVICE_LIMITS = Object.freeze({
 const MAX_SERIES_INPUT_BYTES = 16 * 1024 * 1024;
 const MAX_SERIES_SAMPLES = 2_000_000;
 const MAX_REW_RESPONSE_BYTES = 64 * 1024 * 1024;
+const parsedRewConcurrency = Number.parseInt(process.env.AUDIO_REW_MAX_CONCURRENCY || "4", 10);
+const REW_MAX_CONCURRENCY = Number.isFinite(parsedRewConcurrency) ? Math.max(1, Math.min(8, parsedRewConcurrency)) : 4;
+let activeRewRequests = 0;
+const queuedRewRequests = [];
+
+function releaseRewSlot() {
+  activeRewRequests = Math.max(0, activeRewRequests - 1);
+  while (queuedRewRequests.length) {
+    const ticket = queuedRewRequests.shift();
+    if (ticket.signal?.aborted) continue;
+    ticket.signal?.removeEventListener("abort", ticket.onAbort);
+    activeRewRequests += 1;
+    ticket.resolve(releaseRewSlot);
+    break;
+  }
+}
+
+function acquireRewSlot(signal) {
+  if (signal?.aborted) return Promise.reject(Object.assign(new Error("REW request cancelled"), { code: "REW_CANCELLED" }));
+  if (activeRewRequests < REW_MAX_CONCURRENCY) {
+    activeRewRequests += 1;
+    return Promise.resolve(releaseRewSlot);
+  }
+  return new Promise((resolve, reject) => {
+    const ticket = { resolve, reject, signal, onAbort: null };
+    ticket.onAbort = () => {
+      const index = queuedRewRequests.indexOf(ticket);
+      if (index >= 0) queuedRewRequests.splice(index, 1);
+      reject(Object.assign(new Error("REW request cancelled"), { code: "REW_CANCELLED" }));
+    };
+    signal?.addEventListener("abort", ticket.onAbort, { once: true });
+    queuedRewRequests.push(ticket);
+  });
+}
 
 export function stableToken(value) { return createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
 export async function hashFile(path, maxBytes = 2 * 1024 * 1024 * 1024) {
@@ -105,7 +139,12 @@ export function eqProposal(trace, { lowHz = 40, highHz = 16000, maxCutDb = 6, ma
   return anchors.map(f => { const measured = interpolate(xs, mag, f), correction = Math.max(-maxCutDb, Math.min(maxBoostDb, baseline - measured)); return { type: "PK", frequencyHz: Math.round(f), gainDb: Math.round(correction * 10) / 10, q: 1.2, measuredDb: Math.round(measured * 10) / 10 }; }).filter(x => Math.abs(x.gainDb) >= 0.5);
 }
 export async function rew(path, options = {}) {
-  const controller = new AbortController(), timeoutMs = options.timeoutMs || 8000, timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const release = await acquireRewSlot(options.signal);
+  const controller = new AbortController(), timeoutMs = options.timeoutMs || 8000;
+  const externalAbort = () => controller.abort();
+  if (options.signal?.aborted) externalAbort();
+  else options.signal?.addEventListener("abort", externalAbort, { once: true });
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${REW_BASE}${path}`, { method: options.method || "GET", headers: options.body === undefined ? {} : { "content-type": "application/json" }, body: options.body === undefined ? undefined : JSON.stringify(options.body), signal: controller.signal });
     const declared = Number(response.headers.get("content-length")); if (Number.isFinite(declared) && declared > MAX_REW_RESPONSE_BYTES) throw new Error("REW response exceeds the 64 MB limit");
@@ -114,9 +153,14 @@ export async function rew(path, options = {}) {
     const text = reader ? Buffer.concat(chunks.map(x => Buffer.from(x)), bytes).toString("utf8") : await response.text(); if (!response.ok) throw new Error(`REW ${response.status}: ${text.slice(0, 300)}`);
     if (!text) return null; try { return JSON.parse(text); } catch { return text; }
   } catch (error) {
-    if (error?.name === "AbortError") throw new Error(`REW request timeout after ${timeoutMs} ms`);
+    if (error?.name === "AbortError" && options.signal?.aborted) throw Object.assign(new Error("REW request cancelled"), { code: "REW_CANCELLED" });
+    if (error?.name === "AbortError") throw Object.assign(new Error(`REW request timeout after ${timeoutMs} ms`), { code: "REW_TIMEOUT" });
     throw error;
-  } finally { clearTimeout(timeout); }
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", externalAbort);
+    release();
+  }
 }
 export function measurementEntries(value) { return Array.isArray(value) ? value.map((v, i) => [String(v.id ?? v.uuid ?? i + 1), v]) : Object.entries(value || {}); }
 export async function waitForMeasurement(beforeIds, timeoutMs = 60000) {

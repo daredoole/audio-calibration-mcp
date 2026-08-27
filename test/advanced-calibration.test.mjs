@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  directLateWindowAnalysis, erbSmooth, frequencyDependentSmooth, linkedStereoEqProposal, measuredPostEqVerification,
+  directLateWindowAnalysis, erbSmooth, frequencyDependentSmooth, linkedStereoEqProposal, measuredBroadbandLevelDifference, measuredPostEqVerification,
   measurementStateFingerprint, multiResolutionEqProposal, speakerProtectionAssessment
 } from "../advanced-calibration.mjs";
 
@@ -70,8 +70,17 @@ test("multi-resolution EQ gates raw, minimal, perceptual, repeated, and held-out
 
 test("measured verification rejects unmatched controls and accepts real improvement", () => {
   const assessment = (mid, repeatability = 0.5) => ({ quality: { accepted: true, metrics: { repeatabilitySdDb: repeatability } }, dimensions: { tonalBalance: { raw: { bassRmseDb: 2, midRmseDb: mid, trebleRmseDb: 2 } } } });
-  const rejected = measuredPostEqVerification(assessment(4), assessment(2), { stateMatched: false, levelMatchedWithinDb: 0.1 });
+  const rejected = measuredPostEqVerification(assessment(4), assessment(2), { stateMatched: false, measuredLevelDifferenceDb: 0.1 });
   assert.equal(rejected.accepted, false);
-  const accepted = measuredPostEqVerification(assessment(4), assessment(2), { stateMatched: true, levelMatchedWithinDb: 0.1 });
+  const levelRejected = measuredPostEqVerification(assessment(4), assessment(2), { stateMatched: true, measuredLevelDifferenceDb: -3.45 });
+  assert.equal(levelRejected.accepted, false); assert.equal(levelRejected.evidence.levelMatched, false);
+  const accepted = measuredPostEqVerification(assessment(4), assessment(2), { stateMatched: true, measuredLevelDifferenceDb: 0.1 });
   assert.equal(accepted.status, "verified-improvement");
+});
+
+test("measured broadband level difference is derived from traces", () => {
+  const before = [{ frequencyResponse: response({ peakDb: 0, offsetDb: 70 }) }, { frequencyResponse: response({ peakDb: 0, offsetDb: 70.2 }) }];
+  const after = [{ frequencyResponse: response({ peakDb: 0, offsetDb: 66.5 }) }, { frequencyResponse: response({ peakDb: 0, offsetDb: 66.7 }) }];
+  const measured = measuredBroadbandLevelDifference(before, after, { lowHz: 500, highHz: 8000 });
+  assert.ok(measured.differenceDb < -3.4 && measured.differenceDb > -3.6);
 });

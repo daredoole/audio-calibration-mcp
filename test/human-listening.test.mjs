@@ -6,10 +6,10 @@ import {
 } from "../human-listening.mjs";
 import { verifyPlan } from "../core.mjs";
 
-function trace({ deviceClass = "laptop", bumpDb = 0, dipDb = 0, levelOffset = 0, role, clipped = false } = {}) {
+function trace({ deviceClass = "laptop", bumpDb = 0, dipDb = 0, levelOffset = 0, role, clipped = false, snrDb = 35 } = {}) {
   const target = targetProfile(deviceClass), frequencies = Array.from({ length: 90 }, (_, i) => target.anchors[0][0] * 2 ** (i / 12)).filter(x => x <= target.anchors.at(-1)[0]);
   const magnitude = frequencies.map(f => 70 + levelOffset + targetOffsetDb(target, f) + bumpDb * Math.exp(-0.5 * (Math.log2(f / 1000) / 0.16) ** 2) - dipDb * Math.exp(-0.5 * (Math.log2(f / 2500) / 0.08) ** 2));
-  return { frequencies, magnitude, phase: frequencies.map(() => 0), role, clipped, snrDb: 35 };
+  return { frequencies, magnitude, phase: frequencies.map(() => 0), role, clipped, snrDb };
 }
 
 test("target registry labels defaults as preference starting points", () => {
@@ -25,6 +25,9 @@ test("measurement quality rejects clipping, route drift, and non-repeatability",
   assert.equal(measurementQuality([trace({ clipped: true })], { lowHz: 120, highHz: 16000 }).accepted, false);
   assert.match(measurementQuality([trace()], { lowHz: 120, highHz: 16000, routeStable: false }).reasons.join(" "), /routing/);
   assert.equal(measurementQuality([trace(), trace({ levelOffset: 5 })], { lowHz: 120, highHz: 16000 }).accepted, false);
+  const missingSnr = measurementQuality([trace({ snrDb: null }), trace({ snrDb: null })], { lowHz: 120, highHz: 16000 });
+  assert.equal(missingSnr.accepted, false); assert.match(missingSnr.reasons.join(" "), /SNR evidence is required/);
+  assert.equal(measurementQuality([trace({ snrDb: null })], { lowHz: 120, highHz: 16000, requireSnr: false }).accepted, true);
 });
 
 test("human assessment separates dimensions, confidence, and preference", () => {
@@ -62,9 +65,10 @@ test("filter exports are deterministic and report escapes HTML", () => {
   assert.match(exportFilters(filters, "equalizer-apo"), /Preamp: 0 dB/);
   assert.match(exportFilters(filters, "camilladsp-yaml"), /type: Peaking/);
   const assessment = humanListeningAssessment([trace()], { deviceClass: "laptop", lowHz: 120, highHz: 16000 });
-  const curve = [{ frequencyHz: 120, levelDb: 60 }, { frequencyHz: 1000, levelDb: 70 }, { frequencyHz: 16000, levelDb: 64 }], report = renderHumanReport({ title: "<Safe>", assessment, resolutionViews: { raw: curve, minimal: curve, perceptual: curve } });
+  const curve = [{ frequencyHz: 120, levelDb: 60 }, { frequencyHz: 1000, levelDb: 70 }, { frequencyHz: 16000, levelDb: 64 }], comparisonRows = curve.map(row => ({ frequencyHz: row.frequencyHz, meanDb: row.levelDb, lowDb: row.levelDb - 0.2, highDb: row.levelDb + 0.2 })), report = renderHumanReport({ title: "<Safe>", assessment, resolutionViews: { raw: curve, minimal: curve, perceptual: curve }, comparisonViews: { title: "Before / After", groups: [{ label: "Before", rows: comparisonRows }, { label: "After", rows: comparisonRows.map(row => ({ ...row, meanDb: row.meanDb - 2, lowDb: row.lowDb - 2, highDb: row.highDb - 2 })) }] } });
   assert.match(report.html, /&lt;Safe&gt;/); assert.doesNotMatch(report.html, /<title><Safe>/);
   assert.match(report.html, /Raw \/ unsmoothed/); assert.match(report.html, /polyline/); assert.equal(report.json.schemaVersion, 2);
+  assert.match(report.comparisonSvg, /Before \/ After/); assert.match(report.comparisonSvg, /polygon/); assert.equal(report.json.comparisonViews.groups.length, 2);
 });
 
 test("compression analysis detects lost level increase", () => {

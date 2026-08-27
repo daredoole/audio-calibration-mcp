@@ -168,13 +168,22 @@ export function speakerProtectionAssessment({ measuredF3Hz, manufacturerF3Hz, mi
   return { acceptedForAutomaticEq: knownFloors.length > 0 && reasons.length === 0, correctionFloorHz: round(correctionFloorHz, 1), permittedBoostDb: round(permittedBoostDb, 1), availableHeadroomDb: round(availableHeadroomDb, 1), reasons, invariants: ["Never boost below the highest defensible capability boundary.", "Compression or limiter evidence overrides visual target error.", "Unknown headroom means cut-only EQ."] };
 }
 
-export function measuredPostEqVerification(beforeAssessment, afterAssessment, { minimumTonalImprovementDb = 0.25, maximumRepeatabilityRegressionDb = 0.25, stateMatched = false, levelMatchedWithinDb } = {}) {
+export function measuredBroadbandLevelDifference(beforeTraces, afterTraces, { lowHz = 500, highHz = 8000 } = {}) {
+  const traceLevel = trace => {
+    const rows = humanListeningInternals.traceSamples(trace, lowHz, highHz, 24);
+    return rows.length ? 10 * Math.log10(mean(rows.map(row => 10 ** (row.levelDb / 10)))) : NaN;
+  };
+  const beforeLevelDb = median(beforeTraces.map(traceLevel)), afterLevelDb = median(afterTraces.map(traceLevel));
+  return { beforeLevelDb: round(beforeLevelDb), afterLevelDb: round(afterLevelDb), differenceDb: round(afterLevelDb - beforeLevelDb), bandHz: [lowHz, highHz] };
+}
+
+export function measuredPostEqVerification(beforeAssessment, afterAssessment, { minimumTonalImprovementDb = 0.25, maximumRepeatabilityRegressionDb = 0.25, stateMatched = false, measuredLevelDifferenceDb, levelMatchToleranceDb = 0.2 } = {}) {
   const b = beforeAssessment?.dimensions?.tonalBalance?.raw, a = afterAssessment?.dimensions?.tonalBalance?.raw;
   if (!b || !a) throw new Error("Before and after listening assessments are required");
   const weighted = raw => mean([[raw.bassRmseDb, 0.3], [raw.midRmseDb, 0.5], [raw.trebleRmseDb, 0.2]].flatMap(([x, w]) => Number.isFinite(x) ? Array(Math.round(w * 10)).fill(x) : []));
-  const beforeError = weighted(b), afterError = weighted(a), tonalImprovementDb = beforeError - afterError, repeatabilityRegressionDb = (afterAssessment.quality?.metrics?.repeatabilitySdDb ?? Infinity) - (beforeAssessment.quality?.metrics?.repeatabilitySdDb ?? Infinity), evidenceValid = Boolean(beforeAssessment.quality?.accepted && afterAssessment.quality?.accepted && stateMatched && Number.isFinite(levelMatchedWithinDb) && levelMatchedWithinDb <= 0.2);
+  const beforeError = weighted(b), afterError = weighted(a), tonalImprovementDb = beforeError - afterError, repeatabilityRegressionDb = (afterAssessment.quality?.metrics?.repeatabilitySdDb ?? Infinity) - (beforeAssessment.quality?.metrics?.repeatabilitySdDb ?? Infinity), levelMatched = Number.isFinite(measuredLevelDifferenceDb) && Math.abs(measuredLevelDifferenceDb) <= levelMatchToleranceDb, evidenceValid = Boolean(beforeAssessment.quality?.accepted && afterAssessment.quality?.accepted && stateMatched && levelMatched);
   const accepted = evidenceValid && tonalImprovementDb >= minimumTonalImprovementDb && repeatabilityRegressionDb <= maximumRepeatabilityRegressionDb;
-  return { status: accepted ? "verified-improvement" : "verification-rejected", accepted, metrics: { beforeWeightedTonalErrorDb: round(beforeError), afterWeightedTonalErrorDb: round(afterError), tonalImprovementDb: round(tonalImprovementDb), repeatabilityRegressionDb: round(repeatabilityRegressionDb), levelMatchedWithinDb: round(levelMatchedWithinDb) }, evidence: { beforeQualityAccepted: Boolean(beforeAssessment.quality?.accepted), afterQualityAccepted: Boolean(afterAssessment.quality?.accepted), stateMatched }, reasons: [!evidenceValid ? "Quality, state fingerprint, or <=0.2 dB level-match evidence is missing." : null, tonalImprovementDb < minimumTonalImprovementDb ? "Measured tonal improvement is below the acceptance threshold." : null, repeatabilityRegressionDb > maximumRepeatabilityRegressionDb ? "Repeatability regressed beyond the allowed amount." : null].filter(Boolean) };
+  return { status: accepted ? "verified-improvement" : "verification-rejected", accepted, metrics: { beforeWeightedTonalErrorDb: round(beforeError), afterWeightedTonalErrorDb: round(afterError), tonalImprovementDb: round(tonalImprovementDb), repeatabilityRegressionDb: round(repeatabilityRegressionDb), measuredLevelDifferenceDb: round(measuredLevelDifferenceDb), levelMatchToleranceDb: round(levelMatchToleranceDb) }, evidence: { beforeQualityAccepted: Boolean(beforeAssessment.quality?.accepted), afterQualityAccepted: Boolean(afterAssessment.quality?.accepted), stateMatched, levelMatched }, reasons: [!evidenceValid ? `Quality, state fingerprint, or measured level match within ±${levelMatchToleranceDb} dB is missing.` : null, tonalImprovementDb < minimumTonalImprovementDb ? "Measured tonal improvement is below the acceptance threshold." : null, repeatabilityRegressionDb > maximumRepeatabilityRegressionDb ? "Repeatability regressed beyond the allowed amount." : null].filter(Boolean) };
 }
 
 export const advancedInternals = { magnitudeRows, impulseSeries, octaveDistance, rms, interpolate, humanListeningInternals };

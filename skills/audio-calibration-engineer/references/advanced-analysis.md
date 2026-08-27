@@ -21,6 +21,10 @@ For output capability, use `rew_level_ladder_plan` and `rew_compression_analysis
 
 Use `audio_linked_stereo_eq_plan` only with repeated left and right traces. Each channel must independently pass held-out validation. Linked centers, regularization, and bounded gain differences protect imaging; they do not prove acoustic improvement.
 
-After applying a confirmed preset, repeat the same measurement controls under the new preset. `audio_post_eq_verification` requires matching control fingerprints, different preset fingerprints, accepted before/after quality, no material repeatability regression, and measured level match within 0.2 dB.
+After applying a confirmed preset, repeat the same measurement controls under the new preset. `audio_post_eq_verification` starts a cancellable job; poll `audio_job_status` and use `audio_job_cancel` when needed. It requires matching control fingerprints, different preset fingerprints, accepted before/after quality, no material repeatability regression, and level match within the declared tolerance. The tool calculates that difference from the measured traces across the requested band. It never accepts a caller-asserted match.
+
+The reference quality gate requires finite SNR evidence by default. Missing SNR is not a low-confidence pass. An explicitly exploratory workflow may set `requireSnr: false`, but that evidence cannot advance the guided quality-gate stage or support automatic EQ acceptance.
 
 Listening comparison is a separate preference layer. `audio_listening_test_plan` is ready only when the preset fingerprints differ, the playback chain and excerpts are recorded, and measured level difference is within the declared bound. ABX tests discrimination; randomized AB records preference.
+
+For reports, pass two to four repeated `comparisonGroups` to `audio_report_plan`. Each group is averaged independently at 1/12 octave, retains a shaded ±1 standard-deviation band, and is exported in JSON plus a standalone labeled SVG. Preserve absolute measured level; use the separately calculated level-match result when interpreting preference tests.

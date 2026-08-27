@@ -22,7 +22,7 @@ and keeps preference separate from engineering calculations.
 | Node.js | 20 and 22 |
 | Operating systems | Windows x64, macOS Intel/Apple Silicon, Linux x64/ARM64 |
 | REW | Local API on port 4735; cross-platform install discovery and confirmed startup |
-| JamesDSP | Linux/JDSP4Linux inspect, preview, backup, apply, verify, rollback |
+| JamesDSP | Linux/JDSP4Linux inspect, preview, backup, apply, verify, rollback, blinded level-matched A/B |
 | Equalizer APO | Export; guarded apply when an explicit config path is configured |
 | CamillaDSP | YAML export; guarded file apply when explicitly configured |
 | miniDSP | REW-compatible text export; no hardware mutation in the beta |
@@ -63,8 +63,12 @@ network endpoint. REW's API still must be enabled in REW itself.
    crossover, distortion/compression, and human-listening analyses.
 5. Prefer placement, polarity, timing, crossover, and stable cut-first EQ.
 6. Apply only a hash-bound confirmed plan with backup and rollback.
-7. Re-measure at matched level. Predicted response is never acceptance evidence.
+7. Re-measure at matched level. Start `audio_post_eq_verification`, then poll
+   `audio_job_status`; the verifier derives level difference from the traces.
+   Predicted response and caller-claimed level matching are never acceptance evidence.
 8. Use randomized, level-matched A/B or ABX for preference/discrimination.
+   On JamesDSP, `jamesdsp_ab_plan` plus its presentation and restore executors
+   switch presets and host volume transactionally without revealing assignments.
 
 ## Analysis views
 
@@ -72,6 +76,12 @@ Reports preserve the source trace and display native unsmoothed data, derived
 engineering resolution, 1/48-octave structure, adaptive modal-to-perceptual
 smoothing, and ERB/perceptual views. Filters are eligible only when features are
 stable across repetitions and held-out data. Narrow/spatial nulls are not boosted.
+
+`audio_report_plan` can also accept two to four repeated comparison groups. It
+averages each state, preserves ±1 SD, calculates the measured level difference,
+and exports Markdown, HTML, JSON, and a standalone labeled SVG suitable for a
+README. Missing SNR rejects the quality gate by default; exploratory callers must
+explicitly opt out with `requireSnr: false`.
 
 ## Privacy
 
@@ -87,6 +97,10 @@ result before sharing it.
 DSP and safety fixtures. `npm run validate:release` checks manifests, metadata,
 the bundled server, and package contents. Real-system smoke tests are opt-in and
 must never run in ordinary CI.
+
+REW requests are bounded to four concurrent calls by default. Set
+`AUDIO_REW_MAX_CONCURRENCY` from 1–8 only when the local REW instance has been
+validated at that concurrency.
 
 See [SECURITY.md](SECURITY.md), [CONTRIBUTING.md](CONTRIBUTING.md), and
 [CHANGELOG.md](CHANGELOG.md). Licensed under the MIT License.

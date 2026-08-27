@@ -16,7 +16,7 @@ import {
 } from "./human-listening.mjs";
 import {
   directLateWindowAnalysis, engineeringTraceSummary, erbSmooth, frequencyDependentSmooth, linkedStereoEqProposal,
-  measuredPostEqVerification, measurementStateFingerprint, multiResolutionEqProposal, speakerProtectionAssessment, traceViewRows
+  measuredBroadbandLevelDifference, measuredPostEqVerification, measurementStateFingerprint, multiResolutionEqProposal, speakerProtectionAssessment, traceViewRows
 } from "./advanced-calibration.mjs";
 import { registerReleaseTools } from "./tool-domains/release-tools.mjs";
 import { createCalibrationArtifact } from "./lib/calibration-artifact.mjs";
@@ -269,15 +269,41 @@ server.tool("audio_eq_proposal", "Create conservative cut-first parametric EQ su
 
 const liveEntrySchema = z.object({ id: z.string().min(1).max(120), role: z.string().max(80).optional(), seat: z.string().max(80).optional(), snrDb: z.number().optional(), peakDbfs: z.number().optional(), clipped: z.boolean().optional(), stateFingerprint: z.string().max(128).optional(), controlFingerprint: z.string().max(128).optional(), presetFingerprint: z.string().max(128).optional() });
 const filterSchema = z.object({ type: z.literal("PK"), frequencyHz: z.number().positive(), gainDb: z.number().min(-24).max(12), q: z.number().positive().max(30), evidence: z.record(z.any()).optional() });
-const fetchTraceBundle = async entry => {
-  const id = encodeURIComponent(entry.id), optional = (...paths) => paths.reduce((promise, path) => promise.catch(() => rew(path)), Promise.reject(new Error("unavailable"))).catch(() => null);
-  const [frequencyResponse, groupDelay, distortion, rt60] = await Promise.all([
-    rew(`/measurements/${id}/frequency-response?ppo=96&smoothing=1%2F48`),
-    optional(`/measurements/${id}/group-delay?smoothing=None&unit=ms`, `/measurements/${id}/group-delay?ppo=96&smoothing=1%2F48&unit=ms`),
-    optional(`/measurements/${id}/distortion?ppo=24&smoothing=1%2F12&unit=Percent`),
-    optional(`/measurements/${id}/rt60?ppo=12&smoothing=1%2F3`)
-  ]);
-  return { ...entry, frequencyResponse, groupDelay, distortion, rt60 };
+const comparisonGroupSchema = z.object({ label: z.string().min(1).max(80), color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), entries: z.array(liveEntrySchema).min(2).max(8) });
+const traceBundleCache = new Map();
+const TRACE_BUNDLE_CACHE_TTL_MS = 30_000;
+const fetchTraceBundle = async (entry, { signal, optionalMetrics = true } = {}) => {
+  const cacheKey = stableToken({ id: entry.id, role: entry.role || null, seat: entry.seat || null, stateFingerprint: entry.stateFingerprint || null, controlFingerprint: entry.controlFingerprint || null, presetFingerprint: entry.presetFingerprint || null, optionalMetrics });
+  const cached = traceBundleCache.get(cacheKey);
+  if (cached && Date.now() - cached.createdAt < TRACE_BUNDLE_CACHE_TTL_MS) return cached.promise;
+  const promise = (async () => {
+    const id = encodeURIComponent(entry.id);
+    const optional = async (...paths) => {
+      for (const path of paths) {
+        try { return await rew(path, { signal }); }
+        catch (error) { if (error?.code === "REW_CANCELLED") throw error; }
+      }
+      return null;
+    };
+    const frequencyResponse = await rew(`/measurements/${id}/frequency-response?ppo=96&smoothing=1%2F48`, { signal });
+    if (!optionalMetrics) return { ...entry, frequencyResponse, groupDelay: null, distortion: null, rt60: null };
+    const [groupDelay, distortion, rt60] = await Promise.all([
+      optional(`/measurements/${id}/group-delay?smoothing=None&unit=ms`, `/measurements/${id}/group-delay?ppo=96&smoothing=1%2F48&unit=ms`),
+      optional(`/measurements/${id}/distortion?ppo=24&smoothing=1%2F12&unit=Percent`),
+      optional(`/measurements/${id}/rt60?ppo=12&smoothing=1%2F3`)
+    ]);
+    return { ...entry, frequencyResponse, groupDelay, distortion, rt60 };
+  })();
+  traceBundleCache.set(cacheKey, { createdAt: Date.now(), promise });
+  promise.catch(() => traceBundleCache.delete(cacheKey));
+  return promise;
+};
+const averageComparisonRows = (responses, range) => {
+  const rowSets = responses.map(response => traceViewRows(response, { ...range, maxPoints: 600 })), count = Math.min(...rowSets.map(rows => rows.length));
+  return Array.from({ length: count }, (_, index) => {
+    const rows = rowSets.map(group => group[index]).filter(row => Number.isFinite(row?.levelDb)), levels = rows.map(row => row.levelDb), meanDb = levels.reduce((sum, value) => sum + value, 0) / levels.length, sdDb = Math.sqrt(levels.reduce((sum, value) => sum + (value - meanDb) ** 2, 0) / levels.length);
+    return { frequencyHz: rows[0]?.frequencyHz, meanDb: Number(meanDb.toFixed(3)), sdDb: Number(sdDb.toFixed(3)), lowDb: Number((meanDb - sdDb).toFixed(3)), highDb: Number((meanDb + sdDb).toFixed(3)), traceCount: levels.length };
+  }).filter(row => Number.isFinite(row.frequencyHz) && Number.isFinite(row.meanDb));
 };
 
 server.tool("rew_dual_resolution_analysis", "Return raw/minimally smoothed and ERB-perceptual views so narrow engineering defects remain separate from broad listening interpretation.", {
@@ -308,9 +334,16 @@ server.tool("audio_guided_session_execute", "Open an exact guided session record
 
 server.tool("audio_session_status", "Read a workspace-contained guided calibration session.", { home: z.string().optional(), sessionFile: z.string() }, guarded(async ({ home, sessionFile }) => { const root = await workspaceRoot(home), path = await safeWorkspacePath(root, sessionFile, [".json"]); return ok(JSON.parse(await readFile(path, "utf8"))); }));
 
-const sessionEvidenceSchema = z.object({ accepted: z.boolean(), summary: z.string().min(1).max(1000), artifactRefs: z.array(z.string().min(1).max(300)).max(20).default([]) });
+const sessionEvidenceSchema = z.object({ accepted: z.boolean(), summary: z.string().min(1).max(1000), artifactRefs: z.array(z.string().min(1).max(300)).max(20).default([]), artifact: z.record(z.any()).optional() });
 server.tool("audio_session_advance_plan", "Bind completion of the current guided stage to concise evidence without changing the session.", { home: z.string().optional(), sessionFile: z.string(), completedStage: z.string().min(1).max(100), evidence: sessionEvidenceSchema }, guarded(async args => {
   const root = await workspaceRoot(args.home), path = await safeWorkspacePath(root, args.sessionFile, [".json"]), raw = await readFile(path, "utf8"), session = JSON.parse(raw); if (session.state !== "active") throw new Error("Session is not active"); if (session.currentStage !== args.completedStage) throw new Error(`Current stage is ${session.currentStage}`); if (!args.evidence.accepted) throw new Error("A rejected stage cannot advance; resolve it and submit new evidence");
+  if (args.completedStage === "quality-gate") {
+    if (!args.evidence.artifact?.confirmationToken) throw new Error("The quality-gate stage requires the hash-bound evidenceArtifact returned by rew_measurement_quality");
+    const artifact = verifyPlan(args.evidence.artifact, args.evidence.artifact.confirmationToken);
+    if (artifact.kind !== "measurement-quality-evidence") throw new Error("Wrong evidence artifact kind for the quality-gate stage");
+    if (!artifact.accepted) throw new Error("A rejected measurement-quality artifact cannot advance the session");
+    if (!Number.isFinite(artifact.metrics?.snrDb)) throw new Error("The measurement-quality artifact has no measured SNR");
+  }
   return ok(bindPlan({ kind: "guided-session-advance", createdAt: new Date().toISOString(), home: args.home, sessionFile: args.sessionFile, path, sessionHash: stableToken(raw), completedStage: args.completedStage, evidence: args.evidence }));
 }));
 
@@ -323,7 +356,7 @@ server.tool("audio_session_advance_execute", "Advance one exact guided stage, pr
   catch (error) { await copyFile(backup, path); throw new Error(`${error.message}; session restored from backup`); }
 }));
 
-registerAnalysisTools(server, { ok, guarded, liveEntrySchema, fetchTraceBundle, rew, measurementQuality, humanListeningAssessment, bindPlan, multiResolutionEqProposal, linkedStereoEqProposal, speakerProtectionAssessment, compressionMetrics, measuredPostEqVerification });
+registerAnalysisTools(server, { ok, guarded, liveEntrySchema, fetchTraceBundle, rew, measurementQuality, humanListeningAssessment, bindPlan, multiResolutionEqProposal, linkedStereoEqProposal, speakerProtectionAssessment, compressionMetrics, measuredBroadbandLevelDifference, measuredPostEqVerification });
 
 server.tool("rew_diagnostic_capabilities", "Read the live REW SPL, RTA, stepped-measurement, and generator command surfaces without running them.", {}, guarded(async () => { const endpoints = ["spl-meter", "rta", "stepped-measurement", "generator"], values = await Promise.all(endpoints.map(async endpoint => [endpoint, await rew(`/${endpoint}/commands`).catch(error => ({ unavailable: error.message }))])); return ok(Object.fromEntries(values)); }));
 
@@ -352,16 +385,81 @@ server.tool("audio_filter_export_execute", "Write and verify an exact cross-plat
 server.tool("audio_listening_test_plan", "Create a fingerprinted, measured-level-matched randomized A/B or ABX listening-test plan.", { presetA: z.string().min(1).max(100), presetB: z.string().min(1).max(100), presetFingerprintA: z.string().min(8).max(128).optional(), presetFingerprintB: z.string().min(8).max(128).optional(), mode: z.enum(["AB", "ABX"]).default("ABX"), trials: z.number().int().min(4).max(40).default(8), levelMatchedWithinDb: z.number().min(0.05).max(1).default(0.2), measuredLevelDifferenceDb: z.number().min(-12).max(12).optional(), programExcerpts: z.array(z.string().min(1).max(160)).max(12).default([]), playbackChainFingerprint: z.string().min(8).max(128).optional(), seed: z.string().max(200).optional() }, guarded(async args => ok(listeningTestPlan(args))));
 server.tool("audio_listening_test_report", "Summarize a completed listening test while keeping preference separate from objective quality.", { plan: z.record(z.any()), responses: z.array(z.object({ trial: z.number().int().positive(), choice: z.enum(["A", "B", "same"]), confidence: z.number().min(0).max(100).optional(), note: z.string().max(300).optional() })).max(40) }, guarded(async ({ plan, responses }) => ok(listeningTestReport(plan, responses))));
 
-server.tool("audio_report_plan", "Create a hash-bound Markdown, HTML, and JSON report plan with optional overlaid raw, 1/48, ERB, and frequency-dependent curves.", { baseName: z.string().regex(/^[A-Za-z0-9._-]{1,80}$/), title: z.string().max(120).default("Audio Calibration Report"), assessment: z.record(z.any()), eq: z.record(z.any()).optional(), listening: z.record(z.any()).optional(), resolutionMeasurementId: z.string().max(120).optional(), resolutionLowHz: z.number().min(5).max(1000).default(20), resolutionHighHz: z.number().min(1000).max(24000).default(20000), modalBoundaryHz: z.number().min(20).max(500).default(200), smoothingTransitionHz: z.number().min(100).max(4000).default(1000), home: z.string().optional() }, guarded(async args => {
+server.tool("jamesdsp_ab_plan", "Create a hash-bound randomized JamesDSP A/B plan with measured host-volume compensation and an exact restore target.", {
+  presetA: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}$/), presetB: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}$/), measuredLevelDifferenceDb: z.number().min(-12).max(12), trials: z.number().int().min(4).max(40).default(8), levelMatchToleranceDb: z.number().min(0.05).max(1).default(0.2), programExcerpts: z.array(z.string().min(1).max(160)).min(1).max(12), seed: z.string().max(200).optional(), home: z.string().optional()
+}, guarded(async args => {
+  if (args.presetA === args.presetB) throw new Error("A/B presets must be different");
+  const adapter = await jamesDspAdapter(), status = await jamesDspStatus(), hostOutput = await hostOutputSnapshot();
+  if (!adapter || !status.available) throw new Error(status.reason || "JamesDSP unavailable");
+  const originalPreset = status.presetIdentity?.activePreset;
+  if (!originalPreset) throw new Error("The active JamesDSP configuration must exactly match one preset before starting a reversible A/B test");
+  if (!hostOutput.sink || !Number.isFinite(hostOutput.volumePercent)) throw new Error("Default host output and volume could not be identified");
+  const presetDirectory = join(dirname(adapter.configPath), "presets"), paths = { A: join(presetDirectory, `${args.presetA}.conf`), B: join(presetDirectory, `${args.presetB}.conf`) };
+  const [contentA, contentB] = await Promise.all([readFile(paths.A, "utf8"), readFile(paths.B, "utf8")]);
+  const volumeA = hostOutput.volumePercent * 10 ** (Math.min(0, args.measuredLevelDifferenceDb) / 20), volumeB = hostOutput.volumePercent * 10 ** (Math.min(0, -args.measuredLevelDifferenceDb) / 20);
+  const fingerprints = { A: stableToken(contentA), B: stableToken(contentB) }, playbackChainFingerprint = stableToken({ sink: hostOutput.sink, originalVolumePercent: hostOutput.volumePercent, fingerprints });
+  const listening = listeningTestPlan({ presetA: args.presetA, presetB: args.presetB, presetFingerprintA: fingerprints.A, presetFingerprintB: fingerprints.B, mode: "AB", trials: args.trials, levelMatchedWithinDb: args.levelMatchToleranceDb, measuredLevelDifferenceDb: 0, programExcerpts: args.programExcerpts, playbackChainFingerprint, seed: args.seed });
+  return ok(bindPlan({ kind: "jamesdsp-ab", createdAt: new Date().toISOString(), home: args.home, presetNames: { A: args.presetA, B: args.presetB }, presetPaths: paths, presetFingerprints: fingerprints, measuredUncompensatedLevelDifferenceDb: args.measuredLevelDifferenceDb, presentationVolumesPercent: { A: Number(volumeA.toFixed(2)), B: Number(volumeB.toFixed(2)) }, hostOutput, originalPreset, originalEffectiveFingerprint: status.effectiveConfigurationFingerprint, listening }));
+}));
+
+server.tool("jamesdsp_ab_present_execute", "Present one blinded, randomized, level-matched JamesDSP A/B sample with transactional rollback.", { ...planSchema, trial: z.number().int().positive(), sample: z.union([z.literal(1), z.literal(2)]) }, guarded(async ({ plan, confirmationToken, confirm, trial, sample }) => {
+  if (!confirm) throw new Error("Explicit confirmation required");
+  const p = verifyPlan(plan, confirmationToken); if (p.kind !== "jamesdsp-ab") throw new Error("Wrong plan kind");
+  const assignment = p.listening.assignments.find(item => item.trial === trial), letter = assignment?.referenceOrder?.[sample - 1];
+  if (!letter) throw new Error("Trial or sample is outside the randomized plan");
+  const adapter = await jamesDspAdapter(), beforeStatus = await jamesDspStatus(), beforeHost = await hostOutputSnapshot();
+  if (!adapter || !beforeStatus.available) throw new Error("JamesDSP unavailable");
+  const rollbackPreset = beforeStatus.presetIdentity?.activePreset;
+  if (!rollbackPreset) throw new Error("Current JamesDSP state is not an exact preset and cannot be transactionally restored");
+  const root = await workspaceRoot(p.home), backup = await jamesDspBackup(root, "jamesdsp-ab"), targetName = p.presetNames[letter], targetPath = p.presetPaths[letter], targetVolume = p.presentationVolumesPercent[letter];
+  try {
+    await execFileAsync(adapter.command, [...adapter.prefix, "--load-preset", targetName], { timeout: 10000, env: hostAudioEnv() });
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await execFileAsync("pactl", ["set-sink-volume", p.hostOutput.sink, `${targetVolume}%`], { timeout: 10000, env: hostAudioEnv() });
+    await new Promise(resolve => setTimeout(resolve, 500));
+    const [active, target, verifiedStatus, verifiedHost] = await Promise.all([readFile(adapter.configPath, "utf8"), readFile(targetPath, "utf8"), jamesDspStatus(), hostOutputSnapshot()]);
+    if (active.trim() !== target.trim() || verifiedStatus.presetIdentity?.activePreset !== targetName || !verifiedStatus.runtimeConfigSynchronized) throw new Error("JamesDSP A/B preset verification failed");
+    if (verifiedHost.sink !== p.hostOutput.sink || !Number.isFinite(verifiedHost.volumePercent) || Math.abs(verifiedHost.volumePercent - targetVolume) > 0.1) throw new Error("JamesDSP A/B host-volume verification failed");
+    return ok({ trial, sample, presentation: `Sample ${sample}`, blind: true, levelMatched: true, backup, restoreTool: "jamesdsp_ab_restore_execute" });
+  } catch (error) {
+    await execFileAsync(adapter.command, [...adapter.prefix, "--load-preset", rollbackPreset], { timeout: 10000, env: hostAudioEnv() }).catch(() => {});
+    await copyFile(backup, adapter.configPath).catch(() => {});
+    await restoreHostOutput(beforeHost).catch(() => {});
+    throw new Error(`${error.message}; prior JamesDSP preset and host volume restored`);
+  }
+}));
+
+server.tool("jamesdsp_ab_restore_execute", "Restore the exact JamesDSP preset and host volume captured by a JamesDSP A/B plan.", planSchema, guarded(async ({ plan, confirmationToken, confirm }) => {
+  if (!confirm) throw new Error("Explicit confirmation required");
+  const p = verifyPlan(plan, confirmationToken); if (p.kind !== "jamesdsp-ab") throw new Error("Wrong plan kind");
+  const adapter = await jamesDspAdapter(); if (!adapter) throw new Error("JamesDSP unavailable");
+  await execFileAsync(adapter.command, [...adapter.prefix, "--load-preset", p.originalPreset], { timeout: 10000, env: hostAudioEnv() });
+  await new Promise(resolve => setTimeout(resolve, 500));
+  const hostRestoration = await restoreHostOutput(p.hostOutput), verified = await jamesDspStatus();
+  if (verified.presetIdentity?.activePreset !== p.originalPreset || !verified.runtimeConfigSynchronized) throw new Error("Original JamesDSP preset restoration failed");
+  return ok({ restored: true, presetName: p.originalPreset, hostRestoration, verified });
+}));
+
+server.tool("audio_report_plan", "Create a hash-bound Markdown, HTML, JSON, and optional standalone before/after SVG report plan.", { baseName: z.string().regex(/^[A-Za-z0-9._-]{1,80}$/), title: z.string().max(120).default("Audio Calibration Report"), assessment: z.record(z.any()), eq: z.record(z.any()).optional(), listening: z.record(z.any()).optional(), resolutionMeasurementId: z.string().max(120).optional(), comparisonGroups: z.array(comparisonGroupSchema).min(2).max(4).optional(), comparisonSubtitle: z.string().max(180).optional(), resolutionLowHz: z.number().min(5).max(1000).default(20), resolutionHighHz: z.number().min(1000).max(24000).default(20000), modalBoundaryHz: z.number().min(20).max(500).default(200), smoothingTransitionHz: z.number().min(100).max(4000).default(1000), levelMatchLowHz: z.number().min(20).max(2000).default(500), levelMatchHighHz: z.number().min(1000).max(20000).default(8000), home: z.string().optional() }, guarded(async args => {
   let resolutionViews = null;
   if (args.resolutionMeasurementId) { const id = encodeURIComponent(args.resolutionMeasurementId), raw = await rew(`/measurements/${id}/frequency-response?smoothing=None`).catch(() => null), minimal = await rew(`/measurements/${id}/frequency-response?ppo=96&smoothing=1%2F48`), source = raw?.smoothing === "None" ? raw : minimal, range = { lowHz: args.resolutionLowHz, highHz: args.resolutionHighHz }; resolutionViews = { raw: traceViewRows(source, range), minimal: traceViewRows(minimal, range), perceptual: erbSmooth(source, range).rows.map(x => ({ frequencyHz: x.frequencyHz, levelDb: x.levelDb })), adaptive: frequencyDependentSmooth(source, { ...range, modalBoundaryHz: args.modalBoundaryHz, transitionHz: args.smoothingTransitionHz }).rows.map(x => ({ frequencyHz: x.frequencyHz, levelDb: x.levelDb })) }; }
-  const reportArgs = { ...args, resolutionViews }; renderHumanReport(reportArgs); const root = await workspaceRoot(args.home), paths = {}; for (const ext of [".md", ".html", ".json"]) paths[ext] = await safeWorkspacePath(root, join("reports", `${args.baseName}${ext}`), [ext]); return ok(bindPlan({ kind: "audio-report", createdAt: new Date().toISOString(), ...reportArgs, paths }));
+  let comparisonViews = null;
+  if (args.comparisonGroups?.length) {
+    const range = { lowHz: args.resolutionLowHz, highHz: args.resolutionHighHz }, fetchedGroups = [];
+    for (const group of args.comparisonGroups) {
+      const responses = await Promise.all(group.entries.map(entry => rew(`/measurements/${encodeURIComponent(entry.id)}/frequency-response?ppo=96&smoothing=1%2F12`)));
+      fetchedGroups.push({ ...group, responses, rows: averageComparisonRows(responses, range) });
+    }
+    const measuredLevel = fetchedGroups.length === 2 ? measuredBroadbandLevelDifference(fetchedGroups[0].responses.map((frequencyResponse, index) => ({ ...fetchedGroups[0].entries[index], frequencyResponse })), fetchedGroups[1].responses.map((frequencyResponse, index) => ({ ...fetchedGroups[1].entries[index], frequencyResponse })), { lowHz: args.levelMatchLowHz, highHz: args.levelMatchHighHz }) : null;
+    comparisonViews = { title: args.title, subtitle: args.comparisonSubtitle || "Repeated REW measurements · 1/12-octave smoothing · shaded ±1 SD", smoothing: "1/12 octave", measuredLevel, groups: fetchedGroups.map(({ label, color, entries, rows }) => ({ label, color, inputIds: entries.map(entry => entry.id), traceCount: entries.length, rows })) };
+  }
+  const reportArgs = { ...args, resolutionViews, comparisonViews }; renderHumanReport(reportArgs); const root = await workspaceRoot(args.home), paths = {}; for (const ext of comparisonViews ? [".md", ".html", ".json", ".svg"] : [".md", ".html", ".json"]) paths[ext] = await safeWorkspacePath(root, join("reports", `${args.baseName}${ext}`), [ext]); return ok(bindPlan({ kind: "audio-report", createdAt: new Date().toISOString(), ...reportArgs, paths }));
 }));
 
 server.tool("audio_report_execute", "Write and verify an exact human-readable and machine-readable calibration report set.", planSchema, guarded(async ({ plan, confirmationToken, confirm }) => {
   if (!confirm) throw new Error("Explicit confirmation required"); const p = verifyPlan(plan, confirmationToken); if (p.kind !== "audio-report") throw new Error("Wrong plan kind"); const report = renderHumanReport(p), root = await workspaceRoot(p.home); await mkdir(join(root, "reports"), { recursive: true });
-  const values = { ".md": report.markdown, ".html": report.html, ".json": JSON.stringify(report.json, null, 2) + "\n" }, entries = []; for (const [ext, path] of Object.entries(p.paths)) { if (path !== await safeWorkspacePath(root, relative(root, path), [ext])) throw new Error("Report path verification failed"); entries.push([path, values[ext]]); } await writeAtomicSet(entries, confirmationToken);
-  const parsed = JSON.parse(await readFile(p.paths[".json"], "utf8")); if (parsed.schemaVersion !== 2) throw new Error("Report verification failed"); return ok({ written: p.paths, schemaVersion: parsed.schemaVersion });
+  const values = { ".md": report.markdown, ".html": report.html, ".json": JSON.stringify(report.json, null, 2) + "\n", ".svg": report.comparisonSvg }, entries = []; for (const [ext, path] of Object.entries(p.paths)) { if (path !== await safeWorkspacePath(root, relative(root, path), [ext])) throw new Error("Report path verification failed"); if (typeof values[ext] !== "string") throw new Error(`Report content missing for ${ext}`); entries.push([path, values[ext]]); } await writeAtomicSet(entries, confirmationToken);
+  const parsed = JSON.parse(await readFile(p.paths[".json"], "utf8")); if (parsed.schemaVersion !== 2) throw new Error("Report verification failed"); return ok({ written: p.paths, schemaVersion: parsed.schemaVersion, readmeMarkdown: p.paths[".svg"] ? `![${p.title}](${relative(root, p.paths[".svg"])})` : null });
 }));
 
 const profileSchema = z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9_-]{1,63}$/), deviceClass: z.enum(["general", "car", "laptop"]), manufacturer: z.string().max(100).optional(), model: z.string().max(150).optional(), role: z.string().max(80), f3Hz: z.number().positive().optional(), sensitivityDb: z.number().optional(), nominalImpedanceOhm: z.number().positive().optional(), maxSplDb: z.number().positive().optional(), listeningDistanceM: z.number().positive().optional(), coordinatesM: z.object({ x: z.number(), y: z.number(), z: z.number() }).optional(), source: z.string().max(300).optional(), notes: z.string().max(1000).optional() });
@@ -388,6 +486,15 @@ server.tool("car_geometric_delay_advisor", "Calculate a geometry-only initial de
 
 server.tool("jamesdsp_status", "Detect JDSP4Linux and decode engine, master-bypass, EQ-module, runtime-sync, and active-preset identity state.", {}, guarded(async () => ok(await jamesDspStatus())));
 server.tool("jamesdsp_snapshot", "Fingerprint the live JamesDSP configuration and identify the exact active preset and effective EQ/bypass state without changing anything.", {}, guarded(async () => { const status = await jamesDspStatus(); if (!status.available) throw new Error(status.reason); const config = await readFile(status.configPath, "utf8"); const keys = config.split("\n").filter(x => /^[a-z0-9_]+=/.test(x)).map(x => x.slice(0, x.indexOf("="))); return ok({ ...status, configurationKeys: keys, configurationBytes: Buffer.byteLength(config) }); }));
+const pulseVolumePercent = value => { const match = String(value || "").match(/([0-9]+(?:\.[0-9]+)?)%/); return match ? Number(match[1]) : null; };
+const hostOutputSnapshot = async () => { const host = await hostInventory(); return { platform: host.platform, sink: host.defaultSink || null, volumePercent: pulseVolumePercent(host.defaultSinkVolume), rawVolume: host.defaultSinkVolume || null }; };
+const restoreHostOutput = async snapshot => {
+  if (snapshot?.platform !== "linux" || !snapshot.sink || !Number.isFinite(snapshot.volumePercent)) return { attempted: false, verified: false };
+  await execFileAsync("pactl", ["set-sink-volume", snapshot.sink, `${snapshot.volumePercent}%`], { timeout: 10000, env: hostAudioEnv() });
+  const after = await hostOutputSnapshot(), verified = after.sink === snapshot.sink && Number.isFinite(after.volumePercent) && Math.abs(after.volumePercent - snapshot.volumePercent) <= 0.1;
+  if (!verified) throw new Error("Host output volume restoration failed");
+  return { attempted: true, verified: true, after };
+};
 server.tool("jamesdsp_preset_plan", "Create a hash-bound JamesDSP preset operation with an automatic configuration backup.", { action: z.enum(["load", "save"]), presetName: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9 _.-]{0,79}$/), home: z.string().optional() }, guarded(async args => { const status = await jamesDspStatus(); if (!status.available) throw new Error(status.reason); return ok(bindPlan({ kind: "jamesdsp-preset", createdAt: new Date().toISOString(), status, action: args.action, presetName: args.presetName, home: args.home })); }));
 server.tool("jamesdsp_preset_execute", "Back up JamesDSP, execute an exact preset load/save plan, verify status, and automatically restore the active configuration on failure.", planSchema, guarded(async ({ plan, confirmationToken, confirm }) => {
   if (!confirm) throw new Error("Explicit confirmation required"); const p = verifyPlan(plan, confirmationToken); if (p.kind !== "jamesdsp-preset") throw new Error("Wrong plan kind");
@@ -399,11 +506,26 @@ server.tool("jamesdsp_preset_execute", "Back up JamesDSP, execute an exact prese
     return ok({ applied: true, action: p.action, presetName: p.presetName, backup, commandWarning, verified, rollback: { activeConfigurationBackup: backup } });
   } catch (error) { await copyFile(backup, status.configPath); const restored = await readFile(status.configPath, "utf8"), source = await readFile(backup, "utf8"); if (restored !== source) throw new Error(`${error.message}; automatic rollback verification also failed`); throw new Error(`${error.message}; active JamesDSP configuration restored from backup`); }
 }));
-server.tool("jamesdsp_key_plan", "Create a hash-bound change for one JamesDSP key after verifying that the installed version exposes it.", { key: z.string().regex(/^[a-z][a-z0-9_]{1,79}$/), value: z.string().min(1).max(1000), home: z.string().optional() }, guarded(async ({ key, value, home }) => { const status = await jamesDspStatus(), adapter = await jamesDspAdapter(); if (!status.available || !adapter) throw new Error(status.reason); const listed = (await execFileAsync(adapter.command, [...adapter.prefix, "--list-keys"], { timeout: 10000, env: hostAudioEnv() })).stdout.split(/\r?\n/).map(x => x.trim()).filter(Boolean); if (!listed.includes(key)) throw new Error("Key is not exposed by this JamesDSP version"); const before = (await execFileAsync(adapter.command, [...adapter.prefix, "--get", key], { timeout: 10000, env: hostAudioEnv() })).stdout.trim(); return ok(bindPlan({ kind: "jamesdsp-key", createdAt: new Date().toISOString(), key, value, before, home, configPath: status.configPath })); }));
+server.tool("jamesdsp_key_plan", "Create a hash-bound change for one JamesDSP key after verifying that the installed version exposes it.", { key: z.string().regex(/^[a-z][a-z0-9_]{1,79}$/), value: z.string().min(1).max(1000), home: z.string().optional() }, guarded(async ({ key, value, home }) => { const status = await jamesDspStatus(), adapter = await jamesDspAdapter(); if (!status.available || !adapter) throw new Error(status.reason); const listed = (await execFileAsync(adapter.command, [...adapter.prefix, "--list-keys"], { timeout: 10000, env: hostAudioEnv() })).stdout.split(/\r?\n/).map(x => x.trim()).filter(Boolean); if (!listed.includes(key)) throw new Error("Key is not exposed by this JamesDSP version"); const before = (await execFileAsync(adapter.command, [...adapter.prefix, "--get", key], { timeout: 10000, env: hostAudioEnv() })).stdout.trim(), hostOutput = await hostOutputSnapshot(); return ok(bindPlan({ kind: "jamesdsp-key", createdAt: new Date().toISOString(), key, value: value.trim(), before, home, configPath: status.configPath, beforeEffectiveFingerprint: status.effectiveConfigurationFingerprint, hostOutput })); }));
 server.tool("jamesdsp_key_execute", "Back up JamesDSP, apply one exact key change, verify it, and automatically restore the active configuration on failure.", planSchema, guarded(async ({ plan, confirmationToken, confirm }) => {
   if (!confirm) throw new Error("Explicit confirmation required"); const p = verifyPlan(plan, confirmationToken); if (p.kind !== "jamesdsp-key") throw new Error("Wrong plan kind"); const adapter = await jamesDspAdapter(); if (!adapter) throw new Error("JamesDSP unavailable"); const root = await workspaceRoot(p.home), backup = await jamesDspBackup(root); let commandWarning = null;
-  try { try { await execFileAsync(adapter.command, [...adapter.prefix, "--set", `${p.key}=${p.value}`], { timeout: 10000, env: hostAudioEnv() }); } catch (error) { commandWarning = `JamesDSP CLI exited nonzero: ${error.code ?? "unknown"}`; } const after = (await execFileAsync(adapter.command, [...adapter.prefix, "--get", p.key], { timeout: 10000, env: hostAudioEnv() })).stdout.trim(); if (!after.includes(p.value)) throw new Error("JamesDSP key verification failed"); return ok({ applied: true, key: p.key, before: p.before, after, backup, commandWarning, rollback: { key: p.key, value: p.before, activeConfigurationBackup: backup } }); }
-  catch (error) { await copyFile(backup, p.configPath); const restored = await readFile(p.configPath, "utf8"), source = await readFile(backup, "utf8"); if (restored !== source) throw new Error(`${error.message}; automatic rollback verification also failed`); throw new Error(`${error.message}; active JamesDSP configuration restored from backup`); }
+  try {
+    try { await execFileAsync(adapter.command, [...adapter.prefix, "--set", `${p.key}=${p.value}`], { timeout: 10000, env: hostAudioEnv() }); } catch (error) { commandWarning = `JamesDSP CLI exited nonzero: ${error.code ?? "unknown"}`; }
+    const after = (await execFileAsync(adapter.command, [...adapter.prefix, "--get", p.key], { timeout: 10000, env: hostAudioEnv() })).stdout.trim();
+    if (after !== p.value) throw new Error("JamesDSP key verification failed");
+    const hostAfter = await hostOutputSnapshot(), volumeChanged = p.hostOutput?.sink === hostAfter.sink && Number.isFinite(p.hostOutput?.volumePercent) && Number.isFinite(hostAfter.volumePercent) && Math.abs(p.hostOutput.volumePercent - hostAfter.volumePercent) > 0.1, hostRestoration = volumeChanged ? await restoreHostOutput(p.hostOutput) : { attempted: false, verified: true, after: hostAfter };
+    const verified = await jamesDspStatus();
+    if (!verified.runtimeConfigSynchronized) throw new Error("JamesDSP runtime and configuration are not synchronized after apply");
+    return ok({ applied: true, key: p.key, before: p.before, after, backup, commandWarning, hostSideEffectDetected: volumeChanged, hostRestoration, verified, rollback: { key: p.key, value: p.before, activeConfigurationBackup: backup, hostOutput: p.hostOutput } });
+  }
+  catch (error) {
+    await execFileAsync(adapter.command, [...adapter.prefix, "--set", `${p.key}=${p.before}`], { timeout: 10000, env: hostAudioEnv() }).catch(() => {});
+    await copyFile(backup, p.configPath);
+    await restoreHostOutput(p.hostOutput).catch(() => {});
+    const restored = await readFile(p.configPath, "utf8"), source = await readFile(backup, "utf8"), runtime = (await execFileAsync(adapter.command, [...adapter.prefix, "--get", p.key], { timeout: 10000, env: hostAudioEnv() })).stdout.trim();
+    if (restored !== source || runtime !== p.before) throw new Error(`${error.message}; automatic rollback verification also failed`);
+    throw new Error(`${error.message}; JamesDSP runtime, configuration, and host output restored`);
+  }
 }));
 
 export { server };

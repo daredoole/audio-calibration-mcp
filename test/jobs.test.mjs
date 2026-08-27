@@ -17,8 +17,11 @@ test("asynchronous jobs return results without holding the caller", async () => 
 
 test("jobs can be cancelled and failures expose bounded messages", async () => {
   const store = createJobStore();
-  const cancellable = store.submit("slow", async context => { await delay(15); context.throwIfCancelled(); return true; });
+  let releaseStarted, signalAborted = false; const started = new Promise(resolve => { releaseStarted = resolve; });
+  const cancellable = store.submit("slow", async context => { releaseStarted(); await new Promise((resolve, reject) => { context.signal.addEventListener("abort", () => { signalAborted = true; reject(Object.assign(new Error("cancelled"), { code: "JOB_CANCELLED" })); }, { once: true }); }); return true; });
+  await started;
   assert.equal(store.cancel(cancellable.id).status, "cancelled"); assert.equal((await waitTerminal(store, cancellable.id)).status, "cancelled");
+  assert.equal(signalAborted, true);
   const failed = store.submit("bad", async () => { throw new Error("x".repeat(2000)); });
   const result = await waitTerminal(store, failed.id); assert.equal(result.status, "failed"); assert.equal(result.error.length, 1000);
 });
