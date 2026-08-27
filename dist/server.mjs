@@ -31285,7 +31285,17 @@ import { dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 var execFileAsync = promisify(execFile);
-var REW_BASE = process.env.AUDIO_REW_URL || "http://127.0.0.1:4735";
+function validatedRewBase(value) {
+  const url2 = new URL(value);
+  if (url2.protocol !== "http:" || url2.username || url2.password || url2.pathname !== "/" || url2.search || url2.hash) throw new Error("AUDIO_REW_URL must be a plain HTTP origin without credentials or path");
+  const host = url2.hostname.toLowerCase();
+  if (["127.0.0.1", "localhost", "::1", "[::1]"].includes(host)) return url2.origin;
+  if (process.env.AUDIO_REW_ALLOW_REMOTE !== "true") throw new Error("Remote REW requires AUDIO_REW_ALLOW_REMOTE=true");
+  const parts = host.split(".").map(Number), privateIpv4 = parts.length === 4 && parts.every((x) => Number.isInteger(x) && x >= 0 && x <= 255) && (parts[0] === 10 || parts[0] === 192 && parts[1] === 168 || parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31 || parts[0] === 169 && parts[1] === 254);
+  if (!privateIpv4 && !host.endsWith(".local")) throw new Error("Remote REW must use a private IPv4 address or .local hostname");
+  return url2.origin;
+}
+var REW_BASE = validatedRewBase(process.env.AUDIO_REW_URL || "http://127.0.0.1:4735");
 var DEVICE_LIMITS = Object.freeze({
   general: { startHz: 20, endHz: 2e4, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 },
   car: { startHz: 20, endHz: 2e4, levelDbfs: -24, maxSplDb: 85, maxBoostDb: 3 },
@@ -31996,21 +32006,6 @@ function erbSmooth(trace, { lowHz = 20, highHz = 2e4, stepErb = 0.5, widthErb = 
   }
   return { rows: output, method: "ERB Gaussian power average", stepErb, widthErb, boundary: "Audibility thresholds are conservative workflow heuristics, not universal just-noticeable-difference claims." };
 }
-function engineeringTraceSummary(trace, { lowHz = 20, highHz = 2e4 } = {}) {
-  const rows = magnitudeRows(trace).filter((x) => x.frequencyHz >= lowHz && x.frequencyHz <= highHz), candidates = [], prefix = [0];
-  for (const row of rows) prefix.push(prefix.at(-1) + row.levelDb);
-  let left = 0, right = 0;
-  for (let i = 0; i < rows.length; i++) {
-    const center = rows[i], low = center.frequencyHz / 2 ** (1 / 12), high = center.frequencyHz * 2 ** (1 / 12);
-    while (left < rows.length && rows[left].frequencyHz < low) left++;
-    right = Math.max(right, i + 1);
-    while (right < rows.length && rows[right].frequencyHz <= high) right++;
-    const count = right - left - 1, local = count > 0 ? (prefix[right] - prefix[left] - center.levelDb) / count : NaN, deviationDb = center.levelDb - local;
-    if (Number.isFinite(deviationDb) && Math.abs(deviationDb) >= 1.5) candidates.push({ frequencyHz: round2(center.frequencyHz, 1), deviationFromLocalDb: round2(deviationDb), kind: deviationDb > 0 ? "narrow-peak-candidate" : "narrow-dip-candidate" });
-  }
-  candidates.sort((a, b) => Math.abs(b.deviationFromLocalDb) - Math.abs(a.deviationFromLocalDb));
-  return { pointCount: rows.length, frequencyRangeHz: rows.length ? [round2(rows[0].frequencyHz, 1), round2(rows.at(-1).frequencyHz, 1)] : null, levelRangeDb: rows.length ? [round2(Math.min(...rows.map((x) => x.levelDb))), round2(Math.max(...rows.map((x) => x.levelDb)))] : null, narrowFeatureCandidates: candidates.slice(0, 20), boundary: "Candidates require repeatability, phase/time inspection, and audibility context before correction." };
-}
 function frequencyDependentSmooth(trace, { lowHz = 20, highHz = 2e4, modalBoundaryHz = 200, transitionHz = 1e3, ppo = 24 } = {}) {
   if (transitionHz <= modalBoundaryHz) throw new Error("Transition frequency must exceed the modal boundary");
   const source = magnitudeRows(trace).filter((x) => x.frequencyHz >= lowHz / 1.5 && x.frequencyHz <= highHz * 1.5).map((x) => ({ ...x, power: 10 ** (x.levelDb / 10) })), rows = [];
@@ -32272,6 +32267,7 @@ var CALIBRATION_ARTIFACT_VERSION = 1;
 var DEVICE_CLASSES = /* @__PURE__ */ new Set(["general", "car", "laptop"]);
 var SENSITIVE_KEY = /(user(name)?|home|path|host(name)?|ip(address)?|mac(address)?|serial|device.?id|room.?name|coordinates?|location)/i;
 var RAW_TRACE_KEY = /^(frequencies?|magnitude|phase|impulse|samples?|frequencyResponse|groupDelay|distortion|rt60)$/i;
+var SHA256 = /^[a-f0-9]{64}$/i;
 var plain = (value) => value && typeof value === "object" && !Array.isArray(value) && Object.getPrototypeOf(value) === Object.prototype;
 var safeString = (value) => String(value).replace(/(?:[A-Za-z]:\\|\/home\/|\/Users\/)[^\s"']+/g, "[REDACTED_PATH]").replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[REDACTED_IP]").replace(/\b(?:[0-9A-F]{2}:){5}[0-9A-F]{2}\b/gi, "[REDACTED_MAC]");
 function validateCalibrationArtifact(value) {
@@ -32290,7 +32286,10 @@ function validateCalibrationArtifact(value) {
   else for (const [index, sweep] of value.sweeps.entries()) {
     if (!plain(sweep) || typeof sweep.id !== "string") errors.push(`sweeps[${index}].id is required`);
     if (!plain(sweep?.fingerprints)) errors.push(`sweeps[${index}].fingerprints is required`);
-    else for (const key of ["control", "preset", "microphone"]) if (typeof sweep.fingerprints[key] !== "string" || sweep.fingerprints[key].length < 8) errors.push(`sweeps[${index}].fingerprints.${key} is required`);
+    else for (const key of ["control", "preset", "microphone", "sweep"]) if (!SHA256.test(sweep.fingerprints[key] || "")) errors.push(`sweeps[${index}].fingerprints.${key} must be a real SHA-256 identity`);
+    if (!SHA256.test(sweep?.traceHash || "")) errors.push(`sweeps[${index}].traceHash must hash trace content`);
+    if (!SHA256.test(sweep?.measurementFileHash || "")) errors.push(`sweeps[${index}].measurementFileHash must hash the saved measurement file`);
+    if (typeof sweep?.measurementFile !== "string" || !sweep.measurementFile || sweep.measurementFile.startsWith("/") || /(^|[\\/])\.\.([\\/]|$)/.test(sweep.measurementFile)) errors.push(`sweeps[${index}].measurementFile must be a relative contained path`);
   }
   try {
     if (Buffer.byteLength(JSON.stringify(value)) > 5e6) errors.push("Artifact exceeds the 5 MB metadata limit");
@@ -32574,7 +32573,7 @@ async function launchRew({ candidate, platform = process.platform, timeoutMs = 2
 var analysisJobs = createJobStore();
 var filterSchema = external_exports.object({ type: external_exports.literal("PK"), frequencyHz: external_exports.number().positive(), gainDb: external_exports.number().min(-24).max(12), q: external_exports.number().positive().max(30), evidence: external_exports.record(external_exports.any()).optional() });
 function registerReleaseTools(server2, deps) {
-  const { ok: ok2, guarded: guarded2, bindPlan: bindPlan2, verifyPlan: verifyPlan2, stableToken: stableToken2, workspaceRoot: workspaceRoot2, safeWorkspacePath: safeWorkspacePath2, writeAtomicSet: writeAtomicSet2, exportFilters: exportFilters2, rew: rew2 } = deps;
+  const { ok: ok2, guarded: guarded2, bindPlan: bindPlan2, verifyPlan: verifyPlan2, stableToken: stableToken2, hashFile: hashFile2, workspaceRoot: workspaceRoot2, safeWorkspacePath: safeWorkspacePath2, writeAtomicSet: writeAtomicSet2, exportFilters: exportFilters2, rew: rew2 } = deps;
   server2.tool("audio_job_status", "Poll an asynchronous analysis job without holding an MCP request open.", { jobId: external_exports.string().uuid(), includeResult: external_exports.boolean().default(true) }, guarded2(async ({ jobId, includeResult }) => ok2(analysisJobs.status(jobId, includeResult))));
   server2.tool("audio_job_cancel", "Cancel or suppress the result of an asynchronous analysis job.", { jobId: external_exports.string().uuid(), confirm: external_exports.boolean().default(false) }, guarded2(async ({ jobId, confirm }) => {
     if (!confirm) throw new Error("Explicit cancellation confirmation required");
@@ -32641,13 +32640,22 @@ function registerReleaseTools(server2, deps) {
     verification: external_exports.record(external_exports.any()).nullable().optional(),
     provenance: external_exports.record(external_exports.any()).default({})
   }, guarded2(async (args) => ok2(createCalibrationArtifact(args))));
-  server2.tool("audio_session_replay_validate", "Validate whether a calibration artifact has enough immutable evidence for deterministic offline replay.", { artifact: external_exports.record(external_exports.any()) }, guarded2(async ({ artifact }) => {
+  server2.tool("audio_session_replay_validate", "Validate whether a calibration artifact and its saved measurement bytes have enough immutable evidence for deterministic replay.", { artifact: external_exports.record(external_exports.any()), home: external_exports.string().optional() }, guarded2(async ({ artifact, home }) => {
     const validation = validateCalibrationArtifact(artifact), missing = [];
     if (!artifact?.session?.algorithmVersion) missing.push("session.algorithmVersion");
     if (!artifact?.session?.targetId) missing.push("session.targetId");
     if (!artifact?.provenance?.softwareVersion) missing.push("provenance.softwareVersion");
-    if (!artifact?.sweeps?.every((s) => s.artifactHash || s.traceHash)) missing.push("sweep trace/artifact hashes");
-    return ok2({ replayable: validation.valid && missing.length === 0, validation, missing, stages: ["validate hashes", "reconstruct raw/light/perceptual views", "re-run deterministic analysis", "compare stored results"], hardwareRequired: false });
+    if (!artifact?.sweeps?.every((s) => s.traceHash && s.measurementFileHash)) missing.push("trace and measurement-file hashes");
+    const fileChecks = [];
+    if (validation.valid) {
+      const root = await workspaceRoot2(home), unique = new Map(artifact.sweeps.map((s) => [s.measurementFile, s.measurementFileHash]));
+      for (const [file2, expected] of unique) {
+        const path = await safeWorkspacePath2(root, file2, [".mdat"]), actual = await hashFile2(path);
+        fileChecks.push({ file: file2, expected, actual: actual.sha256, matched: actual.sha256 === expected });
+      }
+      if (fileChecks.some((x) => !x.matched)) missing.push("measurement file content mismatch");
+    }
+    return ok2({ replayable: validation.valid && missing.length === 0, validation, missing, fileChecks, stages: ["validate saved-file and trace-content hashes", "load the immutable MDAT in REW", "reconstruct raw/light/perceptual views", "re-run deterministic analysis", "compare stored results"], hardwareRequired: false });
   }));
   server2.tool("audio_support_bundle_plan", "Create a hash-bound plan for a redacted JSON support artifact; raw traces and identifying metadata are omitted.", {
     home: external_exports.string().optional(),
@@ -32692,6 +32700,10 @@ function registerAnalysisTools(server2, deps) {
     guarded: guarded2,
     liveEntrySchema: liveEntrySchema2,
     fetchTraceBundle: fetchTraceBundle2,
+    traceBundleHash: traceBundleHash2,
+    issueEvidence: issueEvidence2,
+    verifyEvidence: verifyEvidence2,
+    runAnalysisWorker: runAnalysisWorker2,
     rew: rew2,
     measurementQuality: measurementQuality2,
     humanListeningAssessment: humanListeningAssessment2,
@@ -32703,58 +32715,60 @@ function registerAnalysisTools(server2, deps) {
     measuredBroadbandLevelDifference: measuredBroadbandLevelDifference2,
     measuredPostEqVerification: measuredPostEqVerification2
   } = deps;
+  const verifiedInputs = async (entries, signedToken, kind) => {
+    const evidence = verifyEvidence2(signedToken, kind);
+    if (evidence.accepted === false) throw new Error("Measurement quality evidence was rejected");
+    if (!Array.isArray(evidence.entries) || evidence.entries.length !== entries.length) throw new Error("Evidence entry count mismatch");
+    const byId = new Map(evidence.entries.map((entry) => [String(entry.id), entry]));
+    const trustedEntries = entries.map((entry) => {
+      const trusted = byId.get(String(entry.id));
+      if (!trusted) throw new Error(`Measurement ${entry.id} is not bound to the supplied evidence`);
+      for (const key of ["role", "controlFingerprint", "presetFingerprint", "microphoneCalibrationHash", "traceHash"]) if (entry[key] !== void 0 && entry[key] !== trusted[key]) throw new Error(`Measurement ${entry.id} ${key} does not match protected evidence`);
+      return { ...entry, ...trusted };
+    });
+    const traces = await Promise.all(trustedEntries.map(fetchTraceBundle2));
+    for (let i = 0; i < traces.length; i++) if (traceBundleHash2(traces[i]) !== trustedEntries[i].traceHash) throw new Error(`Measurement ${trustedEntries[i].id} trace bytes changed after evidence capture`);
+    return { evidence, entries: trustedEntries, traces };
+  };
   server2.tool("rew_measurement_quality", "Gate live REW traces on coverage, clipping, SNR, repeatability, route state, DSP state, and microphone-calibration identity.", {
     entries: external_exports.array(liveEntrySchema2).min(1).max(32),
+    protectedEvidenceToken: external_exports.string().min(40),
     lowHz: external_exports.number().min(5).max(1e3).default(20),
     highHz: external_exports.number().min(1e3).max(24e3).default(2e4),
-    snrDb: external_exports.number().optional(),
     minSnrDb: external_exports.number().min(5).max(60).default(15),
     requireSnr: external_exports.boolean().default(true),
-    routeStable: external_exports.boolean().default(true),
-    dspStable: external_exports.boolean().default(true),
-    stateVerified: external_exports.boolean().default(false),
-    expectedControlFingerprint: external_exports.string().max(128).optional(),
-    expectedPresetFingerprint: external_exports.string().max(128).optional(),
-    microphoneCalibrationHash: external_exports.string().max(128).optional(),
     requireMicrophoneCalibration: external_exports.boolean().default(false),
     expectedTraceCount: external_exports.number().int().positive().optional()
   }, guarded2(async (args) => {
-    const controlMatched = !args.expectedControlFingerprint || args.entries.every((x) => x.controlFingerprint === args.expectedControlFingerprint), presetMatched = !args.expectedPresetFingerprint || args.entries.every((x) => x.presetFingerprint === args.expectedPresetFingerprint), traces = await Promise.all(args.entries.map(fetchTraceBundle2)), quality = measurementQuality2(traces, { ...args, routeStable: args.routeStable && controlMatched, dspStable: args.dspStable && presetMatched, stateVerified: args.stateVerified || Boolean(args.expectedControlFingerprint && args.expectedPresetFingerprint && controlMatched && presetMatched) });
-    const fingerprintEvidence = { controlMatched, presetMatched, expectedControlFingerprint: args.expectedControlFingerprint || null, expectedPresetFingerprint: args.expectedPresetFingerprint || null };
+    const verified = await verifiedInputs(args.entries, args.protectedEvidenceToken, "protected-measurement-evidence"), controls = new Set(verified.entries.map((x) => x.controlFingerprint)), presets = new Set(verified.entries.map((x) => x.presetFingerprint)), microphones = new Set(verified.entries.map((x) => x.microphoneCalibrationHash)), snrs = verified.entries.map((x) => Number(x.snrDb)).filter(Number.isFinite), quality = measurementQuality2(verified.traces, { ...args, snrDb: snrs.length ? Math.min(...snrs) : void 0, routeStable: controls.size === 1, dspStable: presets.size === 1, stateVerified: true, microphoneCalibrationHash: microphones.size === 1 ? [...microphones][0] : void 0 });
+    const fingerprintEvidence = { controlMatched: controls.size === 1, presetMatched: presets.size === 1, microphoneMatched: microphones.size === 1, sourcePlanHash: verified.evidence.sourcePlanHash };
     const evidenceArtifact = bindPlan2({ kind: "measurement-quality-evidence", createdAt: (/* @__PURE__ */ new Date()).toISOString(), inputIds: args.entries.map((entry) => entry.id), accepted: quality.accepted, metrics: quality.metrics, reasons: quality.reasons, fingerprintEvidence });
-    return ok2({ ...quality, fingerprintEvidence, evidenceArtifact });
+    const qualityEvidenceToken = issueEvidence2({ kind: "accepted-measurement-quality", accepted: quality.accepted, entries: verified.entries, metrics: quality.metrics, reasons: quality.reasons, sourcePlanHash: verified.evidence.sourcePlanHash });
+    return ok2({ ...quality, fingerprintEvidence, evidenceArtifact, qualityEvidenceToken });
   }));
   server2.tool("rew_human_listening_assessment", "Start a cancellable asynchronous multidimensional listening assessment; poll audio_job_status for the result.", {
     entries: external_exports.array(liveEntrySchema2).min(1).max(32),
+    qualityEvidenceToken: external_exports.string().min(40),
     deviceClass: external_exports.enum(["general", "car", "laptop"]),
     targetId: external_exports.string().optional(),
     lowHz: external_exports.number().min(5).max(1e3).optional(),
     highHz: external_exports.number().min(1e3).max(24e3).optional(),
     crossoverHz: external_exports.number().min(20).max(500).optional(),
-    snrDb: external_exports.number().optional(),
     minSnrDb: external_exports.number().min(5).max(60).optional(),
     requireSnr: external_exports.boolean().default(true),
-    routeStable: external_exports.boolean().default(true),
-    dspStable: external_exports.boolean().default(true),
-    stateVerified: external_exports.boolean().default(false),
-    microphoneCalibrationHash: external_exports.string().max(128).optional(),
     requireMicrophoneCalibration: external_exports.boolean().default(false)
   }, guarded2(async (args) => {
     const job = analysisJobs.submit("rew-human-listening-assessment", async (context) => {
-      const traces = [];
-      for (const [index, entry] of args.entries.entries()) {
-        context.throwIfCancelled();
-        traces.push(await fetchTraceBundle2(entry, { signal: context.signal }));
-        context.progress(5 + 80 * (index + 1) / args.entries.length, `Fetched ${index + 1}/${args.entries.length} trace bundles`);
-      }
+      const verified = await verifiedInputs(args.entries, args.qualityEvidenceToken, "accepted-measurement-quality");
       context.throwIfCancelled();
       context.progress(90, "Calculating listening dimensions");
-      return humanListeningAssessment2(traces, args);
+      return runAnalysisWorker2("human-listening", { traces: verified.traces, args: { ...args, stateVerified: true, routeStable: true, dspStable: true, snrDb: Math.min(...verified.entries.map((x) => Number(x.snrDb)).filter(Number.isFinite)) } }, { signal: context.signal });
     }, { entryCount: args.entries.length, deviceClass: args.deviceClass, targetId: args.targetId || null });
     return ok2({ ...job, pollingTool: "audio_job_status", cancellationTool: "audio_job_cancel", resultInline: false });
   }));
   server2.tool("audio_eq_design_plan", "Create a hash-bound, cut-only EQ proposal trained on stable traces and checked against withheld traces.", {
     entries: external_exports.array(liveEntrySchema2).min(1).max(32),
+    qualityEvidenceToken: external_exports.string().min(40),
     deviceClass: external_exports.enum(["general", "car", "laptop"]),
     targetId: external_exports.string().optional(),
     lowHz: external_exports.number().min(5).max(1e3).optional(),
@@ -32770,7 +32784,7 @@ function registerAnalysisTools(server2, deps) {
   }, guarded2(async (args) => {
     const roles = new Set(args.entries.map((x) => x.role || "unspecified"));
     if (roles.size > 1) throw new Error("Design one EQ plan per channel role; do not average different speakers into one filter set");
-    const minimal = await Promise.all(args.entries.map(fetchTraceBundle2)), raw = await Promise.all(args.entries.map(async (entry) => {
+    const verified = await verifiedInputs(args.entries, args.qualityEvidenceToken, "accepted-measurement-quality"), minimal = verified.traces, raw = await Promise.all(verified.entries.map(async (entry) => {
       const id = encodeURIComponent(entry.id), candidate = await rew2(`/measurements/${id}/frequency-response?smoothing=None`).catch(() => null), frequencyResponse = candidate?.smoothing === "None" ? candidate : await rew2(`/measurements/${id}/frequency-response?ppo=96&smoothing=1%2F48`);
       return { ...entry, frequencyResponse };
     })), proposal = multiResolutionEqProposal2(raw, minimal, args);
@@ -32779,6 +32793,8 @@ function registerAnalysisTools(server2, deps) {
   server2.tool("audio_linked_stereo_eq_plan", "Create regularized per-channel EQ with linked filter centers and bounded left/right gain differences; each channel must pass held-out validation independently.", {
     leftEntries: external_exports.array(liveEntrySchema2).min(2).max(12),
     rightEntries: external_exports.array(liveEntrySchema2).min(2).max(12),
+    leftQualityEvidenceToken: external_exports.string().min(40),
+    rightQualityEvidenceToken: external_exports.string().min(40),
     deviceClass: external_exports.enum(["general", "car", "laptop"]),
     targetId: external_exports.string().optional(),
     lowHz: external_exports.number().min(5).max(1e3).optional(),
@@ -32799,7 +32815,8 @@ function registerAnalysisTools(server2, deps) {
       const id = encodeURIComponent(entry.id), candidate = await rew2(`/measurements/${id}/frequency-response?smoothing=None`).catch(() => null), frequencyResponse = candidate?.smoothing === "None" ? candidate : await rew2(`/measurements/${id}/frequency-response?ppo=96&smoothing=1%2F48`);
       return { ...entry, frequencyResponse };
     };
-    const [left, right, leftRaw, rightRaw] = await Promise.all([Promise.all(args.leftEntries.map(fetchTraceBundle2)), Promise.all(args.rightEntries.map(fetchTraceBundle2)), Promise.all(args.leftEntries.map(fetchRaw)), Promise.all(args.rightEntries.map(fetchRaw))]), leftProposal = multiResolutionEqProposal2(leftRaw, left, args), rightProposal = multiResolutionEqProposal2(rightRaw, right, args), proposal = linkedStereoEqProposal2(left, right, { ...args, leftProposal, rightProposal, leftRawTraces: leftRaw, rightRawTraces: rightRaw });
+    const [leftVerified, rightVerified] = await Promise.all([verifiedInputs(args.leftEntries, args.leftQualityEvidenceToken, "accepted-measurement-quality"), verifiedInputs(args.rightEntries, args.rightQualityEvidenceToken, "accepted-measurement-quality")]);
+    const [leftRaw, rightRaw] = await Promise.all([Promise.all(leftVerified.entries.map(fetchRaw)), Promise.all(rightVerified.entries.map(fetchRaw))]), left = leftVerified.traces, right = rightVerified.traces, leftProposal = multiResolutionEqProposal2(leftRaw, left, args), rightProposal = multiResolutionEqProposal2(rightRaw, right, args), proposal = linkedStereoEqProposal2(left, right, { ...args, leftProposal, rightProposal, leftRawTraces: leftRaw, rightRawTraces: rightRaw });
     return ok2(bindPlan2({ kind: "linked-stereo-eq-design", createdAt: (/* @__PURE__ */ new Date()).toISOString(), inputIds: { left: args.leftEntries.map((x) => x.id), right: args.rightEntries.map((x) => x.id) }, proposal }));
   }));
   server2.tool("audio_speaker_protection_assessment", "Derive correction floor and permitted boost only from supplied capability, headroom, compression, and limiter evidence.", {
@@ -32820,38 +32837,28 @@ function registerAnalysisTools(server2, deps) {
   server2.tool("audio_post_eq_verification", "Accept or reject an EQ using separately measured before/after traces, matched state fingerprints, level match, quality gates, and repeatability.", {
     beforeEntries: external_exports.array(liveEntrySchema2).min(2).max(16),
     afterEntries: external_exports.array(liveEntrySchema2).min(2).max(16),
+    beforeQualityEvidenceToken: external_exports.string().min(40),
+    afterQualityEvidenceToken: external_exports.string().min(40),
     deviceClass: external_exports.enum(["general", "car", "laptop"]),
     targetId: external_exports.string().optional(),
     lowHz: external_exports.number().min(5).max(1e3).optional(),
     highHz: external_exports.number().min(1e3).max(24e3).optional(),
     levelMatchLowHz: external_exports.number().min(20).max(2e3).default(500),
     levelMatchHighHz: external_exports.number().min(1e3).max(2e4).default(8e3),
-    beforeControlFingerprint: external_exports.string().min(8).max(128),
-    afterControlFingerprint: external_exports.string().min(8).max(128),
-    beforePresetFingerprint: external_exports.string().min(8).max(128),
-    afterPresetFingerprint: external_exports.string().min(8).max(128),
     levelMatchToleranceDb: external_exports.number().min(0.05).max(1).default(0.2),
     minimumTonalImprovementDb: external_exports.number().min(0.05).max(3).default(0.25),
     maximumRepeatabilityRegressionDb: external_exports.number().min(0).max(3).default(0.25),
-    microphoneCalibrationHash: external_exports.string().max(128).optional(),
     requireMicrophoneCalibration: external_exports.boolean().default(false)
   }, guarded2(async (args) => {
     const job = analysisJobs.submit("audio-post-eq-verification", async (context) => {
-      const fetchGroup = async (entries, label, start, span) => {
-        const traces = [];
-        for (const [index, entry] of entries.entries()) {
-          context.throwIfCancelled();
-          traces.push(await fetchTraceBundle2(entry, { signal: context.signal, optionalMetrics: false }));
-          context.progress(start + span * (index + 1) / entries.length, `Fetched ${label} trace ${index + 1}/${entries.length}`);
-        }
-        return traces;
-      };
-      const beforeTraces = await fetchGroup(args.beforeEntries, "before", 5, 38), afterTraces = await fetchGroup(args.afterEntries, "after", 45, 38);
-      const assessmentArgs = { deviceClass: args.deviceClass, targetId: args.targetId, lowHz: args.lowHz, highHz: args.highHz, microphoneCalibrationHash: args.microphoneCalibrationHash, requireMicrophoneCalibration: args.requireMicrophoneCalibration, requireSnr: true, routeStable: true, dspStable: true, stateVerified: true };
+      const beforeVerified = await verifiedInputs(args.beforeEntries, args.beforeQualityEvidenceToken, "accepted-measurement-quality"), afterVerified = await verifiedInputs(args.afterEntries, args.afterQualityEvidenceToken, "accepted-measurement-quality"), beforeTraces = beforeVerified.traces, afterTraces = afterVerified.traces;
+      const beforeControls = new Set(beforeVerified.entries.map((x) => x.controlFingerprint)), afterControls = new Set(afterVerified.entries.map((x) => x.controlFingerprint)), beforePresets = new Set(beforeVerified.entries.map((x) => x.presetFingerprint)), afterPresets = new Set(afterVerified.entries.map((x) => x.presetFingerprint));
+      const controlsMatched = beforeControls.size === 1 && afterControls.size === 1 && [...beforeControls][0] === [...afterControls][0], presetChanged = beforePresets.size === 1 && afterPresets.size === 1 && [...beforePresets][0] !== [...afterPresets][0];
+      const assessmentArgs = { deviceClass: args.deviceClass, targetId: args.targetId, lowHz: args.lowHz, highHz: args.highHz, microphoneCalibrationHash: beforeVerified.entries[0].microphoneCalibrationHash, requireMicrophoneCalibration: args.requireMicrophoneCalibration, requireSnr: true, routeStable: true, dspStable: true, stateVerified: true };
       context.throwIfCancelled();
       context.progress(88, "Calculating measured level match and verification");
-      const before = humanListeningAssessment2(beforeTraces, assessmentArgs), after = humanListeningAssessment2(afterTraces, assessmentArgs), measuredLevel = measuredBroadbandLevelDifference2(beforeTraces, afterTraces, { lowHz: args.levelMatchLowHz, highHz: args.levelMatchHighHz }), verification = measuredPostEqVerification2(before, after, { minimumTonalImprovementDb: args.minimumTonalImprovementDb, maximumRepeatabilityRegressionDb: args.maximumRepeatabilityRegressionDb, stateMatched: args.beforeControlFingerprint === args.afterControlFingerprint && args.beforePresetFingerprint !== args.afterPresetFingerprint, measuredLevelDifferenceDb: measuredLevel.differenceDb, levelMatchToleranceDb: args.levelMatchToleranceDb });
-      return { ...verification, before, after, measuredLevel, fingerprints: { controlsMatched: args.beforeControlFingerprint === args.afterControlFingerprint, presetChanged: args.beforePresetFingerprint !== args.afterPresetFingerprint }, boundary: "Control fingerprints represent the same route, microphone, geometry, and sweep settings. Level match is calculated from the measured traces; preset fingerprints document the intentional DSP difference." };
+      const worked = await runAnalysisWorker2("post-eq", { beforeTraces, afterTraces, assessmentArgs, levelRange: { lowHz: args.levelMatchLowHz, highHz: args.levelMatchHighHz }, verificationArgs: { minimumTonalImprovementDb: args.minimumTonalImprovementDb, maximumRepeatabilityRegressionDb: args.maximumRepeatabilityRegressionDb, stateMatched: controlsMatched && presetChanged, levelMatchToleranceDb: args.levelMatchToleranceDb } }, { signal: context.signal });
+      return { ...worked.verification, before: worked.before, after: worked.after, measuredLevel: worked.measuredLevel, fingerprints: { controlsMatched, presetChanged }, boundary: "Fingerprints and trace hashes were verified from server-signed quality evidence. Level match is calculated from measured traces." };
     }, { beforeTraceCount: args.beforeEntries.length, afterTraceCount: args.afterEntries.length, deviceClass: args.deviceClass });
     return ok2({ ...job, pollingTool: "audio_job_status", cancellationTool: "audio_job_cancel", resultInline: false });
   }));
@@ -33384,9 +33391,82 @@ function registerScienceTools(server2, { ok: ok2, guarded: guarded2, bindPlan: b
   }));
 }
 
+// lib/worker-runner.mjs
+import { Worker } from "node:worker_threads";
+var maximumWorkers = Math.max(1, Math.min(4, Number.parseInt(process.env.AUDIO_ANALYSIS_WORKERS || "2", 10) || 2));
+var active = 0;
+var queue = [];
+function drain() {
+  while (active < maximumWorkers && queue.length) {
+    const item = queue.shift();
+    if (item.signal?.aborted) {
+      item.reject(Object.assign(new Error("Analysis cancelled"), { code: "JOB_CANCELLED" }));
+      continue;
+    }
+    active += 1;
+    const worker = new Worker(new URL("./analysis-worker.mjs", import.meta.url), { workerData: { kind: item.kind, payload: item.payload } });
+    let settled = false;
+    const finish = (fn, value) => {
+      if (settled) return;
+      settled = true;
+      item.signal?.removeEventListener("abort", abort);
+      active -= 1;
+      fn(value);
+      drain();
+    };
+    const abort = () => {
+      worker.terminate();
+      finish(item.reject, Object.assign(new Error("Analysis cancelled"), { code: "JOB_CANCELLED" }));
+    };
+    item.signal?.addEventListener("abort", abort, { once: true });
+    worker.once("message", (message) => {
+      worker.terminate();
+      message.ok ? finish(item.resolve, message.result) : finish(item.reject, new Error(message.error));
+    });
+    worker.once("error", (error51) => finish(item.reject, error51));
+    worker.once("exit", (code) => {
+      if (!settled && code !== 0) finish(item.reject, new Error(`Analysis worker exited with code ${code}`));
+    });
+  }
+}
+function runAnalysisWorker(kind, payload, { signal } = {}) {
+  return new Promise((resolve3, reject) => {
+    queue.push({ kind, payload, signal, resolve: resolve3, reject });
+    drain();
+  });
+}
+
+// lib/evidence-tokens.mjs
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+function createEvidenceAuthority({ key = randomBytes(32), now = () => Date.now(), ttlMs = 24 * 60 * 6e4 } = {}) {
+  if (!Buffer.isBuffer(key) || key.length < 32) throw new Error("Evidence authority requires at least 256 bits of key material");
+  const issue2 = (payload) => {
+    const at = now(), envelope = { ...payload, issuedAt: new Date(at).toISOString(), expiresAt: new Date(at + ttlMs).toISOString() };
+    const body = Buffer.from(JSON.stringify(envelope)).toString("base64url"), signature = createHmac("sha256", key).update(body).digest("base64url");
+    return `${body}.${signature}`;
+  };
+  const verify = (signed, kind) => {
+    if (typeof signed !== "string" || !signed.includes(".")) throw new Error("Protected evidence token is required");
+    const [body, signature, extra] = signed.split(".");
+    if (extra !== void 0) throw new Error("Malformed protected evidence token");
+    const expected = createHmac("sha256", key).update(body).digest("base64url");
+    if (signature.length !== expected.length || !timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) throw new Error("Protected evidence signature mismatch");
+    let payload;
+    try {
+      payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    } catch {
+      throw new Error("Malformed protected evidence payload");
+    }
+    if (payload.kind !== kind) throw new Error(`Expected ${kind} evidence`);
+    if (!Number.isFinite(Date.parse(payload.expiresAt)) || Date.parse(payload.expiresAt) < now()) throw new Error("Protected evidence token expired");
+    return payload;
+  };
+  return { issue: issue2, verify };
+}
+
 // server.mjs
 var execFileAsync3 = promisify3(execFile3);
-var server = new McpServer({ name: "audio-calibration", version: "0.1.0-beta.1" });
+var server = new McpServer({ name: "audio-calibration", version: "0.2.0-beta.1" });
 var ok = (data, isError = false) => ({ content: [{ type: "text", text: JSON.stringify(data, null, 2) }], isError });
 var guarded = (fn) => async (args) => {
   try {
@@ -33395,6 +33475,10 @@ var guarded = (fn) => async (args) => {
     return ok({ error: error51.message }, true);
   }
 };
+var evidenceAuthority = createEvidenceAuthority();
+var issueEvidence = evidenceAuthority.issue;
+var verifyEvidence = evidenceAuthority.verify;
+var traceBundleHash = (bundle) => stableToken({ frequencyResponse: bundle?.frequencyResponse });
 var planSchema = { plan: external_exports.record(external_exports.any()), confirmationToken: external_exports.string(), confirm: external_exports.boolean().default(false) };
 var pathExists = (path) => access6(path).then(() => true, () => false);
 var writeAtomicSet = async (entries, token) => {
@@ -33422,20 +33506,21 @@ var jamesStateSnapshot = async () => {
   if (!status.available) return { available: false, reason: status.reason };
   return { available: true, connected: status.connected, engineProcessing: status.engineProcessing, masterEnabled: status.masterEnabled, equalizationActive: status.equalizationActive, bypass: status.bypass, moduleStates: status.moduleStates, runtimeConfigSynchronized: status.runtimeConfigSynchronized, activePreset: status.presetIdentity?.activePreset ?? null, presetIdentityStatus: status.presetIdentity?.status, configurationHash: status.configurationHash, effectiveConfigurationFingerprint: status.effectiveConfigurationFingerprint };
 };
+var jamesMeasurementIdentity = (james) => ({ available: james?.available, masterEnabled: james?.masterEnabled ?? null, moduleStates: james?.moduleStates ?? null, runtimeConfigSynchronized: james?.runtimeConfigSynchronized ?? null, activePreset: james?.activePreset ?? null, presetIdentityStatus: james?.presetIdentityStatus ?? null, configurationHash: james?.configurationHash ?? null, effectiveConfigurationFingerprint: james?.effectiveConfigurationFingerprint ?? null });
 var assertStableMeasurementState = async (plan, expectedOutputChannel) => {
   const [audio, host, james] = await Promise.all([audioSnapshot(), hostStateSnapshot(), jamesStateSnapshot()]);
   if (JSON.stringify(audioStateIdentity(audio)) !== JSON.stringify(plan.audioIdentity)) throw new Error("REW audio or microphone-calibration state drifted after planning");
   if (expectedOutputChannel !== void 0 && !JSON.stringify(audio.outputChannel).includes(String(expectedOutputChannel))) throw new Error("REW output channel drifted during measurement");
   if (JSON.stringify(host) !== JSON.stringify(plan.hostState)) throw new Error("Host audio route or mute state drifted during measurement");
-  if (JSON.stringify(james) !== JSON.stringify(plan.jamesDspState)) throw new Error("JamesDSP state drifted during measurement");
+  if (JSON.stringify(jamesMeasurementIdentity(james)) !== JSON.stringify(jamesMeasurementIdentity(plan.jamesDspState))) throw new Error("JamesDSP configuration or preset drifted during measurement");
   return { audio, host, james };
 };
 var capturedMeasurementState = (audio, host, james, sweep) => measurementStateFingerprint({
   route: { sink: host.defaultSink, source: host.defaultSource, sinkMuted: host.defaultSinkMuted, sourceMuted: host.defaultSourceMuted },
   volume: { sink: host.defaultSinkVolume, source: host.defaultSourceVolume, sweepLevelDbfs: sweep?.levelDbfs },
-  dsp: james,
+  dsp: jamesMeasurementIdentity(james),
   microphone: { calibrationHash: audio?.inputCal ? stableToken(audio.inputCal) : null, inputDevice: audio?.inputDevice, inputChannel: audio?.inputChannel },
-  preset: james?.configurationHash ? { configurationHash: james.configurationHash, effectiveConfigurationFingerprint: james.effectiveConfigurationFingerprint, activePreset: james.activePreset, equalizationActive: james.equalizationActive, bypass: james.bypass } : null,
+  preset: james?.configurationHash ? { configurationHash: james.configurationHash, effectiveConfigurationFingerprint: james.effectiveConfigurationFingerprint, activePreset: james.activePreset, masterEnabled: james.masterEnabled, moduleStates: james.moduleStates } : null,
   rew: audioStateIdentity(audio),
   sweep
 });
@@ -33453,9 +33538,9 @@ var GUIDED_STAGE_TOOLS = Object.freeze({
   "level-matched-listening-test": ["audio_listening_test_plan", "audio_listening_test_report"],
   report: ["audio_report_plan", "audio_report_execute"]
 });
-registerReleaseTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath, writeAtomicSet, exportFilters, rew });
+registerReleaseTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, hashFile, workspaceRoot, safeWorkspacePath, writeAtomicSet, exportFilters, rew });
 registerScienceTools(server, { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath });
-server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.1.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["general", "car", "laptop"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts", "curated licensed dataset catalog with confirmed checksum-verified acquisition"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], measurementScience: ["GUM linear and JCGM-101-style Monte Carlo uncertainty", "bootstrap repeatability confidence", "coherence and phase-confidence trace rejection", "clock drift and harmonic contamination", "EDT, T20/T30, C50/C80, D50, center time, spatial variance", "polar/directivity and clean-output characterization", "held-out-seat complex multi-source optimization", "regularized bounded FIR with causality and deployment gates", "MUSHRA and BS.1116-inspired controlled tests", "immersive layout and SOFA metadata preflight", "domain-specific independent-corpus provenance gates"], claimLevels: ["engineering-quality-screen", "standards-aligned", "conformant only with complete normative procedure and evidence"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation", "no standards conformance claim from home measurements alone", "remote catalog entries never count as verified evidence"] })));
+server.tool("audio_capabilities", "Report platform, safety limits, REW endpoint, targets, and optional integration support.", {}, guarded(async () => ok({ platform: process.platform, arch: process.arch, version: "0.2.0-beta.1", rewUrl: REW_BASE, deviceLimits: DEVICE_LIMITS, workflows: ["general", "car", "laptop"], modes: ["guided", "expert"], targets: Object.values(TARGET_REGISTRY), evidenceRegistryVersion: 1, calibrationArtifactSchemaVersion: 1, filterExports: ["rew-generic", "equalizer-apo", "camilladsp-yaml", "minidsp-rew", "json"], adapters: ["JamesDSP", "Equalizer APO", "CamillaDSP"], operationalFeatures: ["cross-platform REW discovery and confirmed launch", "REW capability negotiation", "asynchronous cancellable analyses", "environment doctor", "redacted support artifacts", "versioned offline replay artifacts", "curated licensed dataset catalog with confirmed checksum-verified acquisition"], advancedAnalysis: ["separate 4-6 trace L/R/combined sessions", "route/volume/DSP/microphone/preset fingerprints", "native-linear unsmoothed plus derived 192-PPO engineering analysis", "1/48, adaptive modal-to-perceptual, and ERB views", "cross-resolution repeated and held-out EQ acceptance", "overlaid multi-resolution HTML/JSON reports", "direct versus late impulse windows", "protected level ladders", "regularized linked-stereo EQ", "speaker protection gating", "measured post-EQ verification", "fingerprinted level-matched AB/ABX", "JamesDSP engine/master/module/bypass and exact-preset fingerprints"], measurementScience: ["GUM linear and JCGM-101-style Monte Carlo uncertainty", "bootstrap repeatability confidence", "coherence and phase-confidence trace rejection", "clock drift and harmonic contamination", "EDT, T20/T30, C50/C80, D50, center time, spatial variance", "polar/directivity and clean-output characterization", "held-out-seat complex multi-source optimization", "regularized bounded FIR with causality and deployment gates", "MUSHRA and BS.1116-inspired controlled tests", "immersive layout and SOFA metadata preflight", "domain-specific independent-corpus provenance gates"], claimLevels: ["engineering-quality-screen", "standards-aligned", "conformant only with complete normative procedure and evidence"], jamesDsp: await jamesDspStatus(), guarantees: ["hash-bound mutations", "workspace path containment", "microphone calibration preservation", "clipping and SPL guards", "repeatability and state quality gates", "withheld-trace EQ validation", "post-change verification", "objective and preference evidence separation", "no standards conformance claim from home measurements alone", "remote catalog entries never count as verified evidence"] })));
 server.tool("audio_workspace_scan", "Inventory profiles, sessions, measurements, backups, and reports in the AudioCalibration workspace.", { home: external_exports.string().optional() }, guarded(async ({ home }) => {
   const root = await workspaceRoot(home), groups = {};
   for (const name of ["profiles", "sessions", "measurements", "backups", "reports", "filters", "support", "datasets"]) {
@@ -33664,7 +33749,7 @@ server.tool("rew_measurement_execute", "Run an exact protected sweep plan, label
         try {
           const [host, james] = await Promise.all([hostStateSnapshot(), jamesStateSnapshot()]);
           if (JSON.stringify(host) !== JSON.stringify(p.hostState)) driftError = new Error("Host audio state changed during sweep");
-          else if (JSON.stringify(james) !== JSON.stringify(p.jamesDspState)) driftError = new Error("JamesDSP state changed during sweep");
+          else if (JSON.stringify(jamesMeasurementIdentity(james)) !== JSON.stringify(jamesMeasurementIdentity(p.jamesDspState))) driftError = new Error("JamesDSP configuration or preset changed during sweep");
           if (driftError) await rew("/measure/command", { method: "POST", body: { command: "Cancel" }, timeoutMs: 5e3 }).catch(() => {
           });
         } catch (error51) {
@@ -33679,18 +33764,24 @@ server.tool("rew_measurement_execute", "Run an exact protected sweep plan, label
         clearInterval(monitor);
       }
       if (driftError) throw driftError;
-      const [id] = await waitForMeasurement(before, measurementTimeoutMs);
+      const [id, summary] = await waitForMeasurement(before, measurementTimeoutMs);
       await rew(`/measurements/${encodeURIComponent(id)}`, { method: "PUT", body: { title: run2.title, notes: JSON.stringify(runEvidence) } });
-      completed.push({ id, title: run2.title, outputChannel: run2.outputChannel, role: run2.role || null, repeat: run2.repeat || null, levelDbfs: runLevelDbfs, stateFingerprint: p.stateFingerprint?.fingerprint || null, controlFingerprint: p.stateFingerprint?.controlFingerprint || null, presetFingerprint: p.jamesDspState?.configurationHash || stableToken({ jamesDsp: p.jamesDspState }), microphoneCalibrationHash: p.stateFingerprint?.state?.microphone?.calibrationHash || stableToken({ calibration: "unknown" }), microphoneCalibrationKnown: Boolean(p.stateFingerprint?.state?.microphone?.calibrationHash), sweepFingerprint: stableToken({ settings: p.settings, outputChannel: run2.outputChannel, role: run2.role || null, repeat: run2.repeat || null, levelDbfs: runLevelDbfs }) });
+      const controlFingerprint = p.stateFingerprint?.controlFingerprint, presetFingerprint = p.jamesDspState?.configurationHash, microphoneCalibrationHash = p.stateFingerprint?.state?.microphone?.calibrationHash;
+      if (!controlFingerprint || !presetFingerprint || !microphoneCalibrationHash) throw new Error("Protected measurements require real control, preset, and microphone-calibration fingerprints");
+      completed.push({ id, title: run2.title, outputChannel: run2.outputChannel, role: run2.role || null, repeat: run2.repeat || null, levelDbfs: runLevelDbfs, stateFingerprint: p.stateFingerprint?.fingerprint || null, controlFingerprint, presetFingerprint, microphoneCalibrationHash, microphoneCalibrationKnown: true, snrDb: Number.isFinite(Number(summary?.signalToNoisedB)) ? Number(summary.signalToNoisedB) : null, clipped: Boolean(summary?.clipped), sweepFingerprint: stableToken({ settings: p.settings, outputChannel: run2.outputChannel, role: run2.role || null, repeat: run2.repeat || null, levelDbfs: runLevelDbfs }) });
       await assertStableMeasurementState(p, run2.outputChannel);
       await new Promise((resolve3) => setTimeout(resolve3, 2e3));
     }
     await mkdir5(dirname5(p.savePath), { recursive: true });
     await rew("/measurements/command", { method: "POST", body: { command: "Save all", parameters: [p.savePath, `${p.deviceClass} protected calibration session`] }, timeoutMs: 12e4 });
-    const root = await workspaceRoot(p.home), artifact = createCalibrationArtifact({ session: { id: confirmationToken.slice(0, 16), deviceClass: p.deviceClass, algorithmVersion: "0.1.0-beta.1", targetId: p.targetId || null, targetVersion: p.targetId ? TARGET_REGISTRY[p.targetId]?.version || null : null, mode: p.mode, sourcePlanHash: confirmationToken }, sweeps: completed.map((run2) => ({ id: run2.id, role: run2.role, repeat: run2.repeat, levelDbfs: run2.levelDbfs, outputChannel: run2.outputChannel, fingerprints: { control: run2.controlFingerprint || stableToken({ control: "unknown" }), preset: run2.presetFingerprint, microphone: run2.microphoneCalibrationHash, sweep: run2.sweepFingerprint }, measurementFile: relative2(root, p.savePath), traceHash: stableToken({ id: run2.id, title: run2.title, stateFingerprint: run2.stateFingerprint }) })), provenance: { softwareVersion: "0.1.0-beta.1", rewUrl: REW_BASE, platform: process.platform, arch: process.arch } }), artifactPath = await safeWorkspacePath(root, join5("sessions", `${basename(p.savePath, ".mdat")}-${confirmationToken.slice(0, 12)}.calibration.json`), [".json"]);
+    const root = await workspaceRoot(p.home), measurementFileHash = await hashFile(p.savePath);
+    for (const run2 of completed) run2.traceHash = traceBundleHash(await fetchTraceBundle(run2, { optionalMetrics: false }));
+    const protectedEvidence = { kind: "protected-measurement-evidence", sourcePlanHash: confirmationToken, measurementFile: relative2(root, p.savePath), measurementFileHash, entries: completed.map((run2) => ({ id: run2.id, role: run2.role, repeat: run2.repeat, controlFingerprint: run2.controlFingerprint, presetFingerprint: run2.presetFingerprint, microphoneCalibrationHash: run2.microphoneCalibrationHash, sweepFingerprint: run2.sweepFingerprint, traceHash: run2.traceHash, snrDb: run2.snrDb, clipped: run2.clipped })) };
+    const protectedEvidenceToken = issueEvidence(protectedEvidence);
+    const artifact = createCalibrationArtifact({ session: { id: confirmationToken.slice(0, 16), deviceClass: p.deviceClass, algorithmVersion: "0.2.0-beta.1", targetId: p.targetId || null, targetVersion: p.targetId ? TARGET_REGISTRY[p.targetId]?.version || null : null, mode: p.mode, sourcePlanHash: confirmationToken }, sweeps: completed.map((run2) => ({ id: run2.id, role: run2.role, repeat: run2.repeat, levelDbfs: run2.levelDbfs, outputChannel: run2.outputChannel, fingerprints: { control: run2.controlFingerprint, preset: run2.presetFingerprint, microphone: run2.microphoneCalibrationHash, sweep: run2.sweepFingerprint }, measurementFile: relative2(root, p.savePath), measurementFileHash: measurementFileHash.sha256, traceHash: run2.traceHash })), provenance: { softwareVersion: "0.2.0-beta.1", rewUrl: REW_BASE, platform: process.platform, arch: process.arch } }), artifactPath = await safeWorkspacePath(root, join5("sessions", `${basename(p.savePath, ".mdat")}-${confirmationToken.slice(0, 12)}.calibration.json`), [".json"]);
     await mkdir5(dirname5(artifactPath), { recursive: true });
     await writeAtomicSet([[artifactPath, JSON.stringify(artifact, null, 2) + "\n"]], confirmationToken);
-    return ok({ completed, saved: p.savePath, calibrationArtifact: artifactPath, settings: p.settings, stateEvidence: { verified: true, sourcePlanHash: confirmationToken, fingerprint: p.stateFingerprint, audioIdentity: p.audioIdentity, hostState: p.hostState, jamesDspState: p.jamesDspState, monitorIntervalMs: 1500, verifiedAt: (/* @__PURE__ */ new Date()).toISOString() }, skippedRequestedChannels: p.runs.map((x) => x.outputChannel).filter((x) => !completed.some((y) => y.outputChannel === x)), next: "Run rew_measurement_quality with this protected-session state evidence before interpretation or EQ." });
+    return ok({ completed, saved: p.savePath, measurementFileHash, calibrationArtifact: artifactPath, protectedEvidenceToken, settings: p.settings, stateEvidence: { verified: true, sourcePlanHash: confirmationToken, fingerprint: p.stateFingerprint, audioIdentity: p.audioIdentity, hostState: p.hostState, jamesDspState: p.jamesDspState, monitorIntervalMs: 1500, verifiedAt: (/* @__PURE__ */ new Date()).toISOString() }, skippedRequestedChannels: p.runs.map((x) => x.outputChannel).filter((x) => !completed.some((y) => y.outputChannel === x)), next: "Run rew_measurement_quality with protectedEvidenceToken before interpretation or EQ." });
   } finally {
     if (initialTiming !== null) await rew("/measure/timing/reference", { method: "POST", body: initialTiming }).catch(() => {
     });
@@ -33767,7 +33858,7 @@ server.tool("audio_eq_proposal", "Create conservative cut-first parametric EQ su
   const filters = eqProposal(trace, { lowHz: args.lowHz ?? lim.startHz, highHz: args.highHz ?? Math.min(lim.endHz, 16e3), maxCutDb: args.maxCutDb, maxBoostDb: Math.min(args.maxBoostDb ?? 0, lim.maxBoostDb), bands: args.bands });
   return ok({ filters, status: "proposal-only", warnings: ["Do not boost narrow nulls.", "Reserve preamp headroom for any positive gain.", "Re-measure after application."] });
 }));
-var liveEntrySchema = external_exports.object({ id: external_exports.string().min(1).max(120), role: external_exports.string().max(80).optional(), seat: external_exports.string().max(80).optional(), snrDb: external_exports.number().optional(), peakDbfs: external_exports.number().optional(), clipped: external_exports.boolean().optional(), stateFingerprint: external_exports.string().max(128).optional(), controlFingerprint: external_exports.string().max(128).optional(), presetFingerprint: external_exports.string().max(128).optional() });
+var liveEntrySchema = external_exports.object({ id: external_exports.string().min(1).max(120), role: external_exports.string().max(80).optional(), seat: external_exports.string().max(80).optional(), snrDb: external_exports.number().optional(), peakDbfs: external_exports.number().optional(), clipped: external_exports.boolean().optional(), stateFingerprint: external_exports.string().max(128).optional(), controlFingerprint: external_exports.string().max(128).optional(), presetFingerprint: external_exports.string().max(128).optional(), microphoneCalibrationHash: external_exports.string().max(128).optional(), traceHash: external_exports.string().max(128).optional() });
 var filterSchema2 = external_exports.object({ type: external_exports.literal("PK"), frequencyHz: external_exports.number().positive(), gainDb: external_exports.number().min(-24).max(12), q: external_exports.number().positive().max(30), evidence: external_exports.record(external_exports.any()).optional() });
 var comparisonGroupSchema = external_exports.object({ label: external_exports.string().min(1).max(80), color: external_exports.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), entries: external_exports.array(liveEntrySchema).min(2).max(8) });
 var traceBundleCache = /* @__PURE__ */ new Map();
@@ -33818,7 +33909,9 @@ server.tool("rew_dual_resolution_analysis", "Return raw/minimally smoothed and E
   smoothingTransitionHz: external_exports.number().min(100).max(4e3).default(1e3)
 }, guarded(async ({ id, lowHz, highHz, stepErb, widthErb, modalBoundaryHz, smoothingTransitionHz }) => {
   const encoded = encodeURIComponent(id), raw = await rew(`/measurements/${encoded}/frequency-response?smoothing=None`).catch(() => null), minimal = await rew(`/measurements/${encoded}/frequency-response?ppo=96&smoothing=1%2F48`), rawUsable = raw && raw.smoothing === "None" && Number.isFinite(Number(raw.freqStep || raw.frequencyStep)), source = rawUsable ? raw : minimal;
-  return ok({ measurementId: id, rawAvailable: Boolean(rawUsable), engineering: { ...engineeringTraceSummary(source, { lowHz, highHz }), smoothing: rawUsable ? "None" : "1/48 fallback", spacing: rawUsable ? "native-linear" : "96-PPO logarithmic", derivedAnalysisGridPpo: rawUsable ? 192 : 96 }, minimallySmoothed: { ...engineeringTraceSummary(minimal, { lowHz, highHz }), smoothing: "1/48", ppo: 96 }, adaptive: frequencyDependentSmooth(source, { lowHz, highHz, modalBoundaryHz, transitionHz: smoothingTransitionHz, ppo: 24 }), perceptual: erbSmooth(source, { lowHz, highHz, stepErb, widthErb }), rawTracePreservedInRew: true, use: { engineering: "phase, timing, resonances, narrow defects, and quality checks", adaptive: "modal-resolution below the boundary with progressively perceptual smoothing above it", perceptual: "broad tonal balance and audibility-oriented EQ decisions" } });
+  const args = { id, lowHz, highHz, stepErb, widthErb, modalBoundaryHz, smoothingTransitionHz };
+  const job = analysisJobs.submit("rew-dual-resolution-analysis", (context) => runAnalysisWorker("dual-resolution", { source, minimal, rawUsable, args }, { signal: context.signal }), { measurementId: id });
+  return ok({ ...job, pollingTool: "audio_job_status", cancellationTool: "audio_job_cancel", resultInline: false });
 }));
 server.tool("rew_direct_late_analysis", "Separate direct-window and later reflected impulse energy without treating the chosen gate as universal.", {
   id: external_exports.string(),
@@ -33899,7 +33992,7 @@ server.tool("audio_session_advance_execute", "Advance one exact guided stage, pr
     throw new Error(`${error51.message}; session restored from backup`);
   }
 }));
-registerAnalysisTools(server, { ok, guarded, liveEntrySchema, fetchTraceBundle, rew, measurementQuality, humanListeningAssessment, bindPlan, multiResolutionEqProposal, linkedStereoEqProposal, speakerProtectionAssessment, compressionMetrics, measuredBroadbandLevelDifference, measuredPostEqVerification });
+registerAnalysisTools(server, { ok, guarded, liveEntrySchema, fetchTraceBundle, traceBundleHash, issueEvidence, verifyEvidence, runAnalysisWorker, rew, measurementQuality, humanListeningAssessment, bindPlan, multiResolutionEqProposal, linkedStereoEqProposal, speakerProtectionAssessment, compressionMetrics, measuredBroadbandLevelDifference, measuredPostEqVerification });
 server.tool("rew_diagnostic_capabilities", "Read the live REW SPL, RTA, stepped-measurement, and generator command surfaces without running them.", {}, guarded(async () => {
   const endpoints = ["spl-meter", "rta", "stepped-measurement", "generator"], values = await Promise.all(endpoints.map(async (endpoint) => [endpoint, await rew(`/${endpoint}/commands`).catch((error51) => ({ unavailable: error51.message }))]));
   return ok(Object.fromEntries(values));
@@ -33978,8 +34071,8 @@ server.tool("jamesdsp_ab_present_execute", "Present one blinded, randomized, lev
     await new Promise((resolve3) => setTimeout(resolve3, 500));
     await execFileAsync3("pactl", ["set-sink-volume", p.hostOutput.sink, `${targetVolume}%`], { timeout: 1e4, env: hostAudioEnv() });
     await new Promise((resolve3) => setTimeout(resolve3, 500));
-    const [active, target, verifiedStatus, verifiedHost] = await Promise.all([readFile5(adapter.configPath, "utf8"), readFile5(targetPath, "utf8"), jamesDspStatus(), hostOutputSnapshot()]);
-    if (active.trim() !== target.trim() || verifiedStatus.presetIdentity?.activePreset !== targetName || !verifiedStatus.runtimeConfigSynchronized) throw new Error("JamesDSP A/B preset verification failed");
+    const [active2, target, verifiedStatus, verifiedHost] = await Promise.all([readFile5(adapter.configPath, "utf8"), readFile5(targetPath, "utf8"), jamesDspStatus(), hostOutputSnapshot()]);
+    if (active2.trim() !== target.trim() || verifiedStatus.presetIdentity?.activePreset !== targetName || !verifiedStatus.runtimeConfigSynchronized) throw new Error("JamesDSP A/B preset verification failed");
     if (verifiedHost.sink !== p.hostOutput.sink || !Number.isFinite(verifiedHost.volumePercent) || Math.abs(verifiedHost.volumePercent - targetVolume) > 0.1) throw new Error("JamesDSP A/B host-volume verification failed");
     return ok({ trial, sample, presentation: `Sample ${sample}`, blind: true, levelMatched: true, backup, restoreTool: "jamesdsp_ab_restore_execute" });
   } catch (error51) {
@@ -34142,8 +34235,8 @@ server.tool("jamesdsp_preset_execute", "Back up JamesDSP, execute an exact prese
     const verified = await jamesDspStatus();
     if (p.action === "save" && !String(verified.presets || "").split(/\r?\n/).includes(p.presetName)) throw new Error("JamesDSP preset save verification failed");
     if (p.action === "load") {
-      const presetPath = join5(dirname5(status.configPath), "presets", `${p.presetName}.conf`), [active, preset] = await Promise.all([readFile5(status.configPath, "utf8"), readFile5(presetPath, "utf8")]);
-      if (active.trim() !== preset.trim()) throw new Error("JamesDSP preset load verification failed");
+      const presetPath = join5(dirname5(status.configPath), "presets", `${p.presetName}.conf`), [active2, preset] = await Promise.all([readFile5(status.configPath, "utf8"), readFile5(presetPath, "utf8")]);
+      if (active2.trim() !== preset.trim()) throw new Error("JamesDSP preset load verification failed");
     }
     return ok({ applied: true, action: p.action, presetName: p.presetName, backup, commandWarning, verified, rollback: { activeConfigurationBackup: backup } });
   } catch (error51) {

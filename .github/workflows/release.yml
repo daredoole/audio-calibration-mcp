@@ -19,14 +19,18 @@ jobs:
           package-manager-cache: false
       - run: npm ci --ignore-scripts
       - run: npm run security:verify
-      - run: npm test
+      - run: npm run coverage
       - run: npm run validate:release
+      - run: npm run mcpb:build
       - run: npm pack
       - run: npm sbom --sbom-format cyclonedx > audio-calibration-sbom.json
-      - run: sha256sum audio-calibration-mcp-*.tgz audio-calibration-sbom.json > SHA256SUMS
+      - run: sha256sum audio-calibration-mcp-*.tgz dist/audio-calibration-mcp-*.mcpb audio-calibration-sbom.json > SHA256SUMS
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
-          subject-path: audio-calibration-mcp-*.tgz
+          subject-path: |
+            audio-calibration-mcp-*.tgz
+            dist/audio-calibration-mcp-*.mcpb
+            audio-calibration-sbom.json
       - name: Verify packed archive
         run: |
           mkdir release-smoke
@@ -44,4 +48,4 @@ jobs:
       - name: Create GitHub release with artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" audio-calibration-mcp-*.tgz audio-calibration-sbom.json SHA256SUMS --verify-tag --generate-notes --prerelease
+        run: gh release create "${GITHUB_REF_NAME}" audio-calibration-mcp-*.tgz dist/audio-calibration-mcp-*.mcpb audio-calibration-sbom.json SHA256SUMS --verify-tag --generate-notes --prerelease

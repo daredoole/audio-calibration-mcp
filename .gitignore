@@ -3,6 +3,9 @@ graphify-out/
 dist/*
 !dist/server.mjs
 !dist/cli.cjs
+!dist/analysis-worker.mjs
+build/
+*.mcpb
 coverage/
 *.tgz
 *.log

@@ -1,6 +1,6 @@
 {
   "name": "audio-calibration",
-  "version": "0.1.0-beta.1+codex.20260826201111",
+  "version": "0.2.0-beta.1+codex.20260827135400",
   "description": "Cross-platform Room EQ Wizard measurement, speaker and room calibration, human-listening assessment, and guarded DSP workflows for general systems, cars, and computers",
   "author": {
     "name": "daredoole",

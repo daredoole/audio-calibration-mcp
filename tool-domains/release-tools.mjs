@@ -12,7 +12,7 @@ export const analysisJobs = createJobStore();
 const filterSchema = z.object({ type: z.literal("PK"), frequencyHz: z.number().positive(), gainDb: z.number().min(-24).max(12), q: z.number().positive().max(30), evidence: z.record(z.any()).optional() });
 
 export function registerReleaseTools(server, deps) {
-  const { ok, guarded, bindPlan, verifyPlan, stableToken, workspaceRoot, safeWorkspacePath, writeAtomicSet, exportFilters, rew } = deps;
+  const { ok, guarded, bindPlan, verifyPlan, stableToken, hashFile, workspaceRoot, safeWorkspacePath, writeAtomicSet, exportFilters, rew } = deps;
 
   server.tool("audio_job_status", "Poll an asynchronous analysis job without holding an MCP request open.", { jobId: z.string().uuid(), includeResult: z.boolean().default(true) }, guarded(async ({ jobId, includeResult }) => ok(analysisJobs.status(jobId, includeResult))));
   server.tool("audio_job_cancel", "Cancel or suppress the result of an asynchronous analysis job.", { jobId: z.string().uuid(), confirm: z.boolean().default(false) }, guarded(async ({ jobId, confirm }) => { if (!confirm) throw new Error("Explicit cancellation confirmation required"); return ok(analysisJobs.cancel(jobId)); }));
@@ -55,13 +55,22 @@ export function registerReleaseTools(server, deps) {
   server.tool("audio_artifact_create", "Create and validate a versioned, replayable calibration artifact from supplied evidence.", {
     session: z.record(z.any()), sweeps: z.array(z.record(z.any())).max(256).default([]), analyses: z.record(z.any()).default({}), filters: z.array(z.record(z.any())).max(80).default([]), verification: z.record(z.any()).nullable().optional(), provenance: z.record(z.any()).default({})
   }, guarded(async args => ok(createCalibrationArtifact(args))));
-  server.tool("audio_session_replay_validate", "Validate whether a calibration artifact has enough immutable evidence for deterministic offline replay.", { artifact: z.record(z.any()) }, guarded(async ({ artifact }) => {
+  server.tool("audio_session_replay_validate", "Validate whether a calibration artifact and its saved measurement bytes have enough immutable evidence for deterministic replay.", { artifact: z.record(z.any()), home: z.string().optional() }, guarded(async ({ artifact, home }) => {
     const validation = validateCalibrationArtifact(artifact), missing = [];
     if (!artifact?.session?.algorithmVersion) missing.push("session.algorithmVersion");
     if (!artifact?.session?.targetId) missing.push("session.targetId");
     if (!artifact?.provenance?.softwareVersion) missing.push("provenance.softwareVersion");
-    if (!artifact?.sweeps?.every(s => s.artifactHash || s.traceHash)) missing.push("sweep trace/artifact hashes");
-    return ok({ replayable: validation.valid && missing.length === 0, validation, missing, stages: ["validate hashes", "reconstruct raw/light/perceptual views", "re-run deterministic analysis", "compare stored results"], hardwareRequired: false });
+    if (!artifact?.sweeps?.every(s => s.traceHash && s.measurementFileHash)) missing.push("trace and measurement-file hashes");
+    const fileChecks = [];
+    if (validation.valid) {
+      const root = await workspaceRoot(home), unique = new Map(artifact.sweeps.map(s => [s.measurementFile, s.measurementFileHash]));
+      for (const [file, expected] of unique) {
+        const path = await safeWorkspacePath(root, file, [".mdat"]), actual = await hashFile(path);
+        fileChecks.push({ file, expected, actual: actual.sha256, matched: actual.sha256 === expected });
+      }
+      if (fileChecks.some(x => !x.matched)) missing.push("measurement file content mismatch");
+    }
+    return ok({ replayable: validation.valid && missing.length === 0, validation, missing, fileChecks, stages: ["validate saved-file and trace-content hashes", "load the immutable MDAT in REW", "reconstruct raw/light/perceptual views", "re-run deterministic analysis", "compare stored results"], hardwareRequired: false });
   }));
 
   server.tool("audio_support_bundle_plan", "Create a hash-bound plan for a redacted JSON support artifact; raw traces and identifying metadata are omitted.", {

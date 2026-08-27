@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.daredoole/audio-calibration-mcp",
+  "title": "Audio Calibration MCP",
+  "description": "Evidence-bound REW measurement, analysis, conservative EQ, DSP, and listening-test tools.",
+  "repository": {
+    "url": "https://github.com/daredoole/audio-calibration-mcp",
+    "source": "github"
+  },
+  "version": "0.2.0-beta.1",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/daredoole/audio-calibration-mcp/releases/download/v0.2.0-beta.1/audio-calibration-mcp-0.2.0-beta.1.mcpb",
+      "fileSha256": "05b5363436052765df757d4ae0a6e7dec353685cd0fd350291da74beb49602d8",
+      "transport": { "type": "stdio" }
+    }
+  ]
+}

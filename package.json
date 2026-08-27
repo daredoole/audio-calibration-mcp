@@ -1,6 +1,6 @@
 {
   "name": "audio-calibration-mcp",
-  "version": "0.1.0-beta.1",
+  "version": "0.2.0-beta.1",
   "private": true,
   "type": "module",
   "description": "Cross-platform Model Context Protocol server for Room EQ Wizard measurements, speaker calibration, conservative EQ, and DSP verification",
@@ -41,6 +41,8 @@
     ".mcp.json",
     "assets/",
     "dist/",
+    "mcpb/",
+    "server.json",
     "scripts/validate-release.mjs",
     "skills/",
     "fixtures/reference/",
@@ -56,13 +58,14 @@
     "audio-calibration": "./dist/cli.cjs"
   },
   "scripts": {
-    "build": "esbuild server.mjs --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.mjs && esbuild scripts/audio-calibration-cli.mjs --bundle --platform=node --format=cjs --target=node20 --outfile=dist/cli.cjs",
+    "build": "esbuild server.mjs --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.mjs && esbuild lib/analysis-worker.mjs --bundle --platform=node --format=esm --target=node20 --outfile=dist/analysis-worker.mjs && esbuild scripts/audio-calibration-cli.mjs --bundle --platform=node --format=cjs --target=node20 --outfile=dist/cli.cjs",
     "start": "node dist/server.mjs",
     "test": "npm run build && node --test",
-    "coverage": "npm run build && c8 --check-coverage --lines 80 --statements 80 --functions 70 --branches 60 --reporter=text-summary --include=core.mjs --include=human-listening.mjs --include=advanced-calibration.mjs --include=lib/*.mjs --include=tool-domains/*.mjs --exclude=server.mjs --exclude=dist/** node --test",
+    "coverage": "npm run build && c8 --check-coverage --lines 80 --statements 80 --functions 85 --branches 70 --reporter=text-summary --include=core.mjs --include=human-listening.mjs --include=advanced-calibration.mjs --include=server.mjs --include=lib/*.mjs --include=tool-domains/*.mjs --exclude=dist/** node --test",
     "validate:release": "node scripts/validate-release.mjs",
     "corpus:verify": "node scripts/verify-reference-corpus.mjs",
     "security:verify": "npm audit --audit-level=moderate && npm audit signatures",
+    "mcpb:build": "npm run build && node scripts/build-mcpb.mjs",
     "pack:check": "npm run build && npm run validate:release && npm pack --dry-run --ignore-scripts",
     "cli": "node dist/cli.cjs"
   },
