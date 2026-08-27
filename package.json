@@ -16,7 +16,11 @@
     "digital-signal-processing",
     "equalization",
     "subwoofer-integration",
-    "jamesdsp"
+    "jamesdsp",
+    "camilladsp",
+    "equalizer-apo",
+    "car-audio",
+    "acoustics"
   ],
   "author": "daredoole",
   "funding": {
