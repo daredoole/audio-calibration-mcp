@@ -7,7 +7,8 @@ const requiredMetadata = ["license", "repository", "bugs", "homepage", "files", 
 const requiredKeywords = ["mcp", "model-context-protocol", "rew", "room-eq-wizard", "audio-calibration"];
 const requiredFiles = [
   "dist/server.mjs", "dist/cli.cjs", ".mcp.json", ".codex-plugin/plugin.json", "LICENSE",
-  "README.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md"
+  "README.md", "SECURITY.md", "THIRD_PARTY_NOTICES.md",
+  "docs/getting-started.md", "docs/installation.md", "docs/measured-results.md"
 ];
 
 const pkg = JSON.parse(await readFile("package.json", "utf8"));
