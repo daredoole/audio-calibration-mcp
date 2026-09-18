@@ -40,6 +40,7 @@
     ".codex-plugin/",
     ".mcp.json",
     "assets/",
+    "docs/",
     "dist/",
     "mcpb/",
     "server.json",

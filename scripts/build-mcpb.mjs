@@ -8,6 +8,8 @@ const stage=resolve(root,"build/mcpb"),server=resolve(stage,"server"),output=res
 await rm(stage,{recursive:true,force:true}); await rm(output,{force:true}); await mkdir(server,{recursive:true});
 await cp(resolve(root,"mcpb/manifest.json"),resolve(stage,"manifest.json")); await cp(resolve(root,"dist/server.mjs"),resolve(server,"index.mjs")); await cp(resolve(root,"dist/analysis-worker.mjs"),resolve(server,"analysis-worker.mjs"));
 await cp(resolve(root,"README.md"),resolve(stage,"README.md")); await cp(resolve(root,"LICENSE"),resolve(stage,"LICENSE")); await cp(resolve(root,"assets/audio-calibration-mcp-icon.png"),resolve(stage,"icon.png"));
+await cp(resolve(root,"docs"),resolve(stage,"docs"),{recursive:true});
+await cp(resolve(root,"assets"),resolve(stage,"assets"),{recursive:true});
 execFileSync("npx",["-y","@anthropic-ai/mcpb@2.1.2","validate",resolve(stage,"manifest.json")],{stdio:"inherit"});
 execFileSync("npx",["-y","@anthropic-ai/mcpb@2.1.2","pack",stage,output],{stdio:"inherit"});
 console.log(output);

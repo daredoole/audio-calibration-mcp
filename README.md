@@ -10,6 +10,11 @@ room calibration, subwoofer and crossover analysis, conservative EQ, DSP
 deployment, and measured verification for general, powered-speaker, car, and
 laptop audio systems.
 
+You use it from an AI assistant such as Codex, Claude Code, or Cursor on the same
+computer as REW. MCP is the connection that lets the assistant call these tools;
+this project is not a separate calibration app. REW does the measuring, and your
+DSP or receiver applies the changes it supports.
+
 This project does not promise universally “perfect” sound. REW can measure an
 acoustic system; it cannot infer listener preference, microphone placement, or a
 speaker's safe output capability without evidence. The MCP reports missing data
@@ -20,6 +25,21 @@ and keeps preference separate from engineering calculations.
 [![Release](https://img.shields.io/github/v/release/daredoole/audio-calibration-mcp?include_prereleases&label=release)](https://github.com/daredoole/audio-calibration-mcp/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Buy Me a Coffee](https://img.shields.io/badge/support-Buy%20Me%20a%20Coffee-FFDD00)](https://buymeacoffee.com/daredoole)
+
+## Start here
+
+New to MCP? Follow the [written walkthrough](docs/getting-started.md). It covers
+what you need, how to install and connect the tools, and how to analyse your first
+REW measurement. You can begin with measurements you already have.
+
+- [Install with Codex, Claude Code, or Cursor](docs/installation.md)
+- [Before and after: the measured example and its limits](docs/measured-results.md)
+- [Troubleshooting](docs/getting-started.md#troubleshooting)
+
+The MCP is free and open source. Your chosen assistant has its own account and
+billing requirements. Automated REW sweeps through the API require a REW Pro
+license; reading existing measurements does not require automated sweep control.
+See [REW's API documentation](https://www.roomeqwizard.com/help/help/html/api.html).
 
 ## Choose the right audio MCP
 
@@ -42,6 +62,9 @@ boost was applied. The plot preserves measured SPL; preference was assessed in a
 separate level-matched listening comparison. Device, microphone, and preset
 identifiers are intentionally removed from the public artifact.
 
+See [the example explained](docs/measured-results.md) for what this plot shows,
+what it does not establish, and how to compare changes on your own system.
+
 ## Compatibility
 
 | Component | Support |
@@ -57,11 +80,16 @@ identifiers are intentionally removed from the public artifact.
 
 ## Install
 
-Download a GitHub release archive and point Codex at its `.mcp.json`. For a source
-checkout:
+Follow the [installation guide](docs/installation.md) for release downloads,
+absolute file paths, and the configuration for your assistant. Codex uses
+`config.toml`; the repository's `.mcp.json` is not automatically loaded by the
+Codex CLI. The guide gives an explicit registration command.
+
+For a source checkout:
 
 ```text
 npm ci --ignore-scripts
+npm run build
 npm test
 npm run validate:release
 ```
@@ -79,6 +107,10 @@ API on `http://127.0.0.1:4735`; override `AUDIO_REW_URL` only for a trusted loca
 network endpoint. REW's API still must be enabled in REW itself.
 
 ## Guided workflow
+
+The [beginner walkthrough](docs/getting-started.md#5-analyse-your-first-measurement)
+uses ordinary prompts and explains what to expect. The steps below are the tool
+sequence for users who want to work directly with the MCP interface.
 
 1. Run `audio_doctor`. If REW is offline, use `rew_install_discover`, then the
    confirmed `rew_launch_plan`/`rew_launch_execute` pair. Continue with
